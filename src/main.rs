@@ -30,13 +30,13 @@ struct CleanGuard<'a, B: ratatui::backend::Backend> {
     terminal: &'a mut ratatui::Terminal<B>,
 }
 
-impl<'a, B: ratatui::backend::Backend> CleanGuard<'a, B> {
+impl<B: ratatui::backend::Backend> CleanGuard<'_, B> {
     fn terminal(&mut self) -> &mut ratatui::Terminal<B> {
-        &mut self.terminal
+        self.terminal
     }
 }
 
-impl<'a, B: ratatui::backend::Backend> Drop for CleanGuard<'a, B> {
+impl<B: ratatui::backend::Backend> Drop for CleanGuard<'_, B> {
     fn drop(&mut self) {
         let _ = disable_raw_mode();
         let _ = execute!(
@@ -93,7 +93,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     enable_raw_mode()?;
     let mut app = App::new();
-    let result = app.run(&mut guard.terminal(), rx);
+    let result = app.run(guard.terminal(), rx);
     if let Err(err) = result {
         debug!("Application error: {:?}", err);
         return Err(err.into());

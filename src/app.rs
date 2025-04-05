@@ -52,12 +52,16 @@ impl AppView {
     pub fn apply_scroll(&mut self, panel: Panel, delta: i8, max_scroll: usize) {
         let current = self.get_scroll_offset(panel);
 
-        if delta > 0 {
-            let new_offset = (current + delta as usize).min(max_scroll);
-            self.set_scroll_offset(panel, new_offset);
-        } else if delta < 0 {
-            let new_offset = current.saturating_sub(delta.unsigned_abs() as usize);
-            self.set_scroll_offset(panel, new_offset);
+        match delta.cmp(&0) {
+            std::cmp::Ordering::Greater => {
+                let new_offset = (current + delta as usize).min(max_scroll);
+                self.set_scroll_offset(panel, new_offset);
+            }
+            std::cmp::Ordering::Less => {
+                let new_offset = current.saturating_sub(delta.unsigned_abs() as usize);
+                self.set_scroll_offset(panel, new_offset);
+            }
+            std::cmp::Ordering::Equal => {}
         }
     }
 
@@ -454,19 +458,20 @@ impl App {
     }
 
     fn handle_mouse_event(&mut self, mouse_event: event::MouseEvent, layout_info: &LayoutInfo) {
-        let x = mouse_event.column;
-        let y = mouse_event.row;
+        let (x, y) = (mouse_event.column, mouse_event.row);
+
         match mouse_event.kind {
             event::MouseEventKind::ScrollDown | event::MouseEventKind::ScrollUp => {
-                if let Some(panel) = get_panel_at_point(x, y, layout_info) {
-                    let scroll_delta = if let event::MouseEventKind::ScrollDown = mouse_event.kind {
-                        1
-                    } else {
-                        -1
-                    };
+                let scroll_delta = if matches!(mouse_event.kind, event::MouseEventKind::ScrollDown)
+                {
+                    1
+                } else {
+                    -1
+                };
 
+                if let Some(panel) = get_panel_at_point(x, y, layout_info) {
                     if panel == Panel::RequestList {
-                        if scroll_delta > 0 {
+                        if matches!(mouse_event.kind, event::MouseEventKind::ScrollDown) {
                             self.next_request();
                         } else {
                             self.previous_request();
@@ -475,7 +480,6 @@ impl App {
                         self.apply_scroll_to(panel, scroll_delta);
                     }
                 }
-                return;
             }
 
             event::MouseEventKind::Down(event::MouseButton::Left) => {
