@@ -1,0 +1,11 @@
+{
+  "cSpell.words": [
+    "chrono",
+    "crossterm",
+    "libc",
+    "ratatui",
+    "schemars",
+    "serde",
+    "SIGPIPE"
+  ]
+}
