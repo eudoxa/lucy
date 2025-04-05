@@ -67,7 +67,6 @@ impl SqlQueryInfo {
     }
 
     pub fn display_line_count(&self) -> usize {
-        // (SELECT/INSERT/UPDATE/DELETE)と余白
         self.table_counts.len() + 4
     }
 }

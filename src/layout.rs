@@ -9,6 +9,17 @@ pub enum Panel {
     SqlInfo,
 }
 
+impl Panel {
+    pub(crate) fn all() -> [Panel; 4] {
+        [
+            Panel::RequestList,
+            Panel::RequestDetail,
+            Panel::LogStream,
+            Panel::SqlInfo,
+        ]
+    }
+}
+
 #[derive(Default, Debug, Clone)]
 pub struct LayoutInfo {
     regions: HashMap<Panel, Rect>,
@@ -30,29 +41,14 @@ impl LayoutInfo {
         *self.regions.get(&panel).unwrap_or(&Rect::default())
     }
 
-    // 既存のフィールドアクセサに対する互換性を保持
-    pub fn request_list_region(&self) -> Rect {
-        self.get_region(Panel::RequestList)
-    }
-
-    pub fn request_detail_region(&self) -> Rect {
-        self.get_region(Panel::RequestDetail)
-    }
-
-    pub fn log_stream_region(&self) -> Rect {
-        self.get_region(Panel::LogStream)
-    }
-
-    pub fn sql_info_region(&self) -> Rect {
-        self.get_region(Panel::SqlInfo)
+    pub fn region(&self, panel: Panel) -> Rect {
+        self.get_region(panel)
     }
 }
 
-// レイアウト計算関数
-use ratatui::layout::{Constraint, Direction, Layout};
-
-/// 画面サイズに基づいてレイアウトを計算する関数
 pub fn calculate_layout(area: Rect) -> LayoutInfo {
+    use ratatui::layout::{Constraint, Direction, Layout};
+
     let main_chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Percentage(70), Constraint::Percentage(30)])

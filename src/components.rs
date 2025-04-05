@@ -4,65 +4,32 @@ use crate::log_parser::strip_ansi_for_parsing;
 use crate::sql_info::QueryType;
 use ansi_to_tui::IntoText;
 use ratatui::{
-    Frame,
     style::{Color, Modifier, Style},
     text::{Line, Span, Text},
     widgets::{Block, BorderType, Borders, List, ListItem, Padding, Paragraph, Wrap},
 };
 
-pub fn render(f: &mut Frame, app: &mut App) {
-    let layout_info = &app.app_view.layout_info;
-    let request_list_region = layout_info.request_list_region();
-    let request_detail_region = layout_info.request_detail_region();
-    let log_stream_region = layout_info.log_stream_region();
-    let sql_info_region = layout_info.sql_info_region();
-
-    let request_list = list_component(app);
-    f.render_widget(request_list, request_list_region);
-    let detail_panel = detail_component(app);
-    f.render_widget(detail_panel, request_detail_region);
-    let log_stream = log_stream_component(app);
-    f.render_widget(log_stream, log_stream_region);
-    let sql_panel: Paragraph<'_> = sql_component(app);
-    f.render_widget(sql_panel, sql_info_region);
-}
-
-pub fn list_component(app: &mut App) -> List<'_> {
-    let mut items = Vec::with_capacity(app.request_ids.len());
+pub fn build_list_component(app: &App) -> List<'_> {
+    let mut items = Vec::with_capacity(app.state.request_ids.len());
 
     let viewport_height = app.app_view.get_viewport_height(Panel::RequestList);
-    let new_offset = if app.request_ids.len() > viewport_height {
-        let current_offset = app.app_view.get_scroll_offset(Panel::RequestList);
+    let current_offset = app.app_view.get_scroll_offset(Panel::RequestList);
+    let visible_count =
+        viewport_height.min(app.state.request_ids.len().saturating_sub(current_offset));
+    let end_idx = current_offset + visible_count;
 
-        if app.selected_index < current_offset {
-            app.selected_index
-        } else if app.selected_index >= current_offset + viewport_height {
-            app.selected_index.saturating_sub(viewport_height - 1)
-        } else {
-            current_offset
-        }
-    } else {
-        0
-    };
-
-    app.app_view
-        .set_scroll_offset(Panel::RequestList, new_offset);
-
-    let visible_count = viewport_height.min(app.request_ids.len().saturating_sub(new_offset));
-    let end_idx = new_offset + visible_count;
-
-    for index in new_offset..end_idx {
-        if index >= app.request_ids.len() {
+    for index in current_offset..end_idx {
+        if index >= app.state.request_ids.len() {
             break;
         }
 
-        let request_id = &app.request_ids[index];
-        let time_str = app.first_timestamps.get(request_id).map_or_else(
+        let request_id = &app.state.request_ids[index];
+        let time_str = app.state.first_timestamps.get(request_id).map_or_else(
             || "??:??:??".to_string(),
             |ts| ts.format("%H:%M:%S").to_string(),
         );
 
-        let group = app.logs_by_request_id.get(request_id).unwrap();
+        let group = app.state.logs_by_request_id.get(request_id).unwrap();
         let finished = group.finished;
         let title = group.title.clone();
 
@@ -81,7 +48,7 @@ pub fn list_component(app: &mut App) -> List<'_> {
             ),
         ]);
 
-        let style = if index == app.selected_index {
+        let style = if index == app.state.selected_index {
             Style::default()
                 .fg(Color::Yellow)
                 .add_modifier(Modifier::BOLD)
@@ -111,8 +78,8 @@ pub fn list_component(app: &mut App) -> List<'_> {
     )
 }
 
-pub fn detail_component(app: &mut App) -> Paragraph<'_> {
-    let (title_span, log_text) = match app.selected_group() {
+pub fn build_detail_component(app: &App) -> Paragraph<'_> {
+    let (title_span, log_text) = match app.state.selected_group() {
         None => (Span::raw("Logs"), Text::from("Waiting for logs...")),
         Some(group) => {
             let is_finished = group.finished;
@@ -192,8 +159,9 @@ pub fn detail_component(app: &mut App) -> Paragraph<'_> {
     } else {
         Style::default().fg(Color::DarkGray)
     };
+    let paragraph = Paragraph::new(log_text);
 
-    let scroll_info = if let Some(group) = app.selected_group() {
+    let scroll_info = if let Some(group) = app.state.selected_group() {
         let total_entries = group.entries.len();
         if total_entries == 0 {
             "0/0".to_string()
@@ -201,7 +169,10 @@ pub fn detail_component(app: &mut App) -> Paragraph<'_> {
             let detail_scroll_offset = app.app_view.get_scroll_offset(Panel::RequestDetail);
             let start_idx = detail_scroll_offset + 1;
             let viewport_height = app.app_view.get_viewport_height(Panel::RequestDetail);
-            let end_idx = (start_idx + viewport_height - 1).min(total_entries);
+            let need_height =
+                paragraph.line_count(app.app_view.get_viewport_width(Panel::RequestDetail) as u16);
+            let overflow_lines = need_height.saturating_sub(viewport_height);
+            let end_idx = (start_idx + viewport_height - 4 - overflow_lines).min(total_entries);
             format!("{}-{}/{}", start_idx, end_idx, total_entries)
         }
     } else {
@@ -209,7 +180,6 @@ pub fn detail_component(app: &mut App) -> Paragraph<'_> {
     };
 
     let title_text = format!(" [{}] ", scroll_info);
-
     let block = Block::default()
         .padding(Padding::new(1, 1, 1, 1))
         .title_alignment(ratatui::layout::Alignment::Right)
@@ -225,14 +195,12 @@ pub fn detail_component(app: &mut App) -> Paragraph<'_> {
         .borders(Borders::ALL)
         .border_style(border_style);
 
-    Paragraph::new(log_text)
-        .block(block)
-        .wrap(Wrap { trim: true })
+    paragraph.block(block).wrap(Wrap { trim: true })
 }
 
-pub fn log_stream_component(app: &mut App) -> Paragraph<'_> {
+pub fn build_log_stream_component(app: &App) -> Paragraph<'_> {
     let mut log_text = Text::default();
-    let total_logs = app.all_logs.len();
+    let total_logs = app.state.all_logs.len();
 
     let viewport_height = app.app_view.get_viewport_height(Panel::LogStream);
 
@@ -255,7 +223,7 @@ pub fn log_stream_component(app: &mut App) -> Paragraph<'_> {
     let copy_mode_text = if app.copy_mode_enabled {
         " COPY MODE (press 'm' to exit) "
     } else {
-        " j/k: scroll | Ctrl+d/u: page | Tab/Shift+Tab: panels | Ctrl+c: quit | m: copy mode "
+        " j/k: scroll | Ctrl+d/u: page | Tab/Shift+Tab: panels | Ctrl+c: quit | m: copy mode | f: toggle adaptive FPS "
     };
 
     let scroll_info = if total_logs == 0 {
@@ -305,7 +273,7 @@ pub fn log_stream_component(app: &mut App) -> Paragraph<'_> {
         .alignment(ratatui::layout::Alignment::Left)
 }
 
-pub fn sql_component(app: &mut App) -> Paragraph<'_> {
+pub fn build_sql_component(app: &App) -> Paragraph<'_> {
     let is_active = matches!(app.app_view.focused_panel, Panel::SqlInfo);
     let border_style = if is_active {
         Style::default().fg(Color::White)
@@ -315,7 +283,7 @@ pub fn sql_component(app: &mut App) -> Paragraph<'_> {
 
     let mut text = Text::default();
 
-    if let Some(group) = app.selected_group() {
+    if let Some(group) = app.state.selected_group() {
         let sql_info = &group.sql_query_info;
 
         text.extend(Text::from(Line::from("")));
@@ -357,7 +325,7 @@ pub fn sql_component(app: &mut App) -> Paragraph<'_> {
         }
     }
 
-    let scroll_info = if let Some(group) = app.selected_group() {
+    let scroll_info = if let Some(group) = app.state.selected_group() {
         let total_queries = group.sql_query_info.total_queries();
         if total_queries == 0 {
             "0/0".to_string()

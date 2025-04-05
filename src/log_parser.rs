@@ -1,4 +1,4 @@
-use crate::app::LogEntry;
+use crate::app_state::LogEntry;
 use chrono::Local;
 use once_cell::sync::Lazy;
 use regex::Regex;
@@ -30,7 +30,6 @@ pub fn parse(line: &str) -> Option<LogEntry> {
     })
 }
 
-// Temporarily remove ANSI escape sequences for parsing
 pub fn strip_ansi_for_parsing(text: &str) -> String {
     if !text.contains("\x1b[") {
         return text.to_string();

@@ -28,3 +28,17 @@ Monitor your logs with this command:
 ```bash
 tail -f -n 1000 logs/development.log | lucy
 ```
+
+## Development
+
+To enable debug logs during development, set the `LUCY_DEV` environment variable:
+
+```bash
+LUCY_DEV=1 cargo run
+```
+
+Or when using the installed binary:
+
+```bash
+tail -f -n 1000 logs/development.log | LUCY_DEV=1 lucy
+```
