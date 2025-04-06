@@ -52,7 +52,7 @@ impl AppView {
         }
     }
 
-    pub fn get_viewport_height(&self, panel: Panel) -> usize {
+    pub fn viewport_height(&self, panel: Panel) -> usize {
         let region = self.layout_info.get_region(panel);
 
         match panel {
@@ -69,7 +69,7 @@ impl AppView {
     }
 
     pub fn adjust_scroll_for_index(&mut self, panel: Panel, index: usize) {
-        let viewport_height = self.get_viewport_height(panel);
+        let viewport_height = self.viewport_height(panel);
         let current_offset = self.get_scroll_offset(panel);
 
         if index < current_offset {
@@ -83,12 +83,9 @@ impl AppView {
         x >= area.x && x < area.x + area.width && y >= area.y && y < area.y + area.height
     }
 
-    pub fn get_panel_at_point(&self, x: u16, y: u16) -> Option<Panel> {
-        for panel in Panel::all() {
-            if Self::is_in_region(x, y, &self.layout_info.region(panel)) {
-                return Some(panel);
-            }
-        }
-        None
+    pub fn panel_at_point(&self, x: u16, y: u16) -> Option<Panel> {
+        Panel::all()
+            .into_iter()
+            .find(|&panel| Self::is_in_region(x, y, &self.layout_info.region(panel)))
     }
 }

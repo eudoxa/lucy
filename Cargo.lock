@@ -201,7 +201,6 @@ checksum = "829d955a0bb380ef178a640b91779e3987da38c9aea133b20614cfed8cdea9c6"
 dependencies = [
  "bitflags",
  "crossterm_winapi",
- "filedescriptor",
  "mio",
  "parking_lot",
  "rustix 0.38.44",
@@ -220,6 +219,7 @@ dependencies = [
  "crossterm_winapi",
  "derive_more",
  "document-features",
+ "filedescriptor",
  "mio",
  "parking_lot",
  "rustix 1.0.5",
@@ -550,7 +550,6 @@ dependencies = [
  "backtrace",
  "chrono",
  "color-eyre",
- "crossterm 0.28.1",
  "crossterm 0.29.0",
  "lazy_static",
  "libc",

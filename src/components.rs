@@ -12,7 +12,7 @@ use ratatui::{
 pub fn build_list_component(app: &App) -> List<'_> {
     let mut items = Vec::with_capacity(app.state.request_ids.len());
 
-    let viewport_height = app.app_view.get_viewport_height(Panel::RequestList);
+    let viewport_height = app.app_view.viewport_height(Panel::RequestList);
     let current_offset = app.app_view.get_scroll_offset(Panel::RequestList);
     let visible_count =
         viewport_height.min(app.state.request_ids.len().saturating_sub(current_offset));
@@ -114,7 +114,7 @@ pub fn build_detail_component(app: &App) -> Paragraph<'_> {
                 text.extend(Text::from(Line::from("")));
             }
 
-            let viewport_height = app.app_view.get_viewport_height(Panel::RequestDetail);
+            let viewport_height = app.app_view.viewport_height(Panel::RequestDetail);
             let total_entries = group.entries.len();
             let mut visible_logs = Vec::with_capacity(viewport_height.min(total_entries));
 
@@ -168,7 +168,7 @@ pub fn build_detail_component(app: &App) -> Paragraph<'_> {
         } else {
             let detail_scroll_offset = app.app_view.get_scroll_offset(Panel::RequestDetail);
             let start_idx = detail_scroll_offset + 1;
-            let viewport_height = app.app_view.get_viewport_height(Panel::RequestDetail);
+            let viewport_height = app.app_view.viewport_height(Panel::RequestDetail);
             let need_height =
                 paragraph.line_count(app.app_view.get_viewport_width(Panel::RequestDetail) as u16);
             let overflow_lines = need_height.saturating_sub(viewport_height);
@@ -202,7 +202,7 @@ pub fn build_log_stream_component(app: &App) -> Paragraph<'_> {
     let mut log_text = Text::default();
     let total_logs = app.state.all_logs.len();
 
-    let viewport_height = app.app_view.get_viewport_height(Panel::LogStream);
+    let viewport_height = app.app_view.viewport_height(Panel::LogStream);
 
     if total_logs > 0 {
         let visible_logs = app.get_visible_logs(viewport_height);

@@ -48,7 +48,7 @@ impl App {
         terminal: &mut ratatui::Terminal<B>,
         rx: std::sync::mpsc::Receiver<String>,
     ) -> color_eyre::Result<()> {
-        let mut buffer_size: u8 = 10;
+        let mut batch_size: u8 = 10;
 
         loop {
             terminal.draw(|f| {
@@ -56,12 +56,15 @@ impl App {
             })?;
 
             while let Ok(line) = rx.try_recv() {
-                crate::log_parser::parse(&line).map(|entry| self.add_log_entry(entry));
-                if buffer_size == 0 {
-                    buffer_size = 10;
+                if let Some(entry) = crate::log_parser::parse(&line) {
+                    self.add_log_entry(entry);
+                }
+
+                if batch_size == 0 {
+                    batch_size = 10;
                     break;
                 }
-                buffer_size -= 1;
+                batch_size -= 1;
             }
 
             match crossterm::event::poll(std::time::Duration::from_millis(16)) {
@@ -203,13 +206,13 @@ impl App {
     fn get_max_sql_scroll(&self) -> usize {
         self.state
             .selected_sql_line_count()
-            .saturating_sub(self.app_view.get_viewport_height(Panel::SqlInfo))
+            .saturating_sub(self.app_view.viewport_height(Panel::SqlInfo))
             .max(0)
     }
 
     fn get_max_stream_scroll(&self) -> usize {
         let log_count = self.state.logs_count();
-        let viewport_height = self.app_view.get_viewport_height(Panel::LogStream);
+        let viewport_height = self.app_view.viewport_height(Panel::LogStream);
         log_count.saturating_sub(viewport_height)
     }
 
@@ -220,14 +223,10 @@ impl App {
 
     pub fn add_log_entry(&mut self, log_entry: LogEntry) {
         let is_new_request = self.state.add_log_entry(log_entry);
-
-        if is_new_request {
-            if matches!(self.app_view.focused_panel, Panel::RequestList) {
-                self.app_view
-                    .adjust_scroll_for_index(Panel::RequestList, self.state.selected_index);
-            }
+        if is_new_request && matches!(self.app_view.focused_panel, Panel::RequestList) {
+            self.app_view
+                .adjust_scroll_for_index(Panel::RequestList, self.state.selected_index);
         }
-
         self.auto_scroll_if_needed();
     }
 
@@ -258,7 +257,7 @@ impl App {
 
         match mouse_event.kind {
             event::MouseEventKind::ScrollDown | event::MouseEventKind::ScrollUp => {
-                match self.app_view.get_panel_at_point(x, y) {
+                match self.app_view.panel_at_point(x, y) {
                     Some(Panel::RequestList) => match mouse_event.kind {
                         event::MouseEventKind::ScrollDown => self.next_request(1),
                         event::MouseEventKind::ScrollUp => self.previous_request(1),
@@ -274,7 +273,7 @@ impl App {
             }
 
             event::MouseEventKind::Down(event::MouseButton::Left) => {
-                match self.app_view.get_panel_at_point(x, y) {
+                match self.app_view.panel_at_point(x, y) {
                     Some(panel) if matches!(panel, Panel::RequestList) => {
                         self.app_view.focused_panel = panel;
                         let row_in_list =
@@ -328,7 +327,7 @@ impl App {
     }
 
     fn adjust_request_list_scroll(&mut self) {
-        let viewport_height = self.app_view.get_viewport_height(Panel::RequestList);
+        let viewport_height = self.app_view.viewport_height(Panel::RequestList);
 
         if self.state.request_ids.len() > viewport_height {
             let current_offset = self.app_view.get_scroll_offset(Panel::RequestList);

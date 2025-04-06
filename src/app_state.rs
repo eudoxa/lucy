@@ -136,10 +136,8 @@ impl AppState {
             }
 
             self.logs_by_request_id.insert(request_id, new_group);
-        } else {
-            if let Some(group) = self.logs_by_request_id.get_mut(&request_id) {
-                group.add_entry(log_entry);
-            }
+        } else if let Some(group) = self.logs_by_request_id.get_mut(&request_id) {
+            group.add_entry(log_entry);
         }
 
         is_new_request
