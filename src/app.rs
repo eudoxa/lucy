@@ -25,7 +25,6 @@ impl App {
 
     pub fn render(&mut self, f: &mut ratatui::Frame) {
         self.app_view.layout_info = crate::layout::calculate_layout(f.area());
-        self.adjust_all_scroll_positions();
 
         let request_list_region = self.app_view.layout_info.region(Panel::RequestList);
         let request_detail_region = self.app_view.layout_info.region(Panel::RequestDetail);
@@ -338,9 +337,5 @@ impl App {
             self.app_view
                 .set_scroll_offset(Panel::LogStream, self.get_max_stream_scroll());
         }
-    }
-
-    fn adjust_all_scroll_positions(&mut self) {
-        self.auto_scroll_if_needed();
     }
 }
