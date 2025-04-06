@@ -1,5 +1,5 @@
 use crate::sql_info::SqlQueryInfo;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 
 pub struct AppState {
     pub logs_by_request_id: HashMap<String, LogGroup>,
@@ -10,7 +10,7 @@ pub struct AppState {
 
 pub struct LogGroup {
     pub title: String,
-    pub entries: Vec<LogEntry>,
+    pub entries: VecDeque<LogEntry>,
     pub finished: bool,
     pub sql_query_info: SqlQueryInfo,
     pub first_timestamp: chrono::DateTime<chrono::Local>,
@@ -20,7 +20,7 @@ impl LogGroup {
     pub fn new(log_entry: &LogEntry) -> Self {
         let mut group = Self {
             title: "...".to_string(),
-            entries: Vec::with_capacity(10),
+            entries: VecDeque::with_capacity(10),
             finished: false,
             sql_query_info: SqlQueryInfo::new(),
             first_timestamp: log_entry.timestamp,
@@ -49,7 +49,7 @@ impl LogGroup {
             self.sql_query_info.merge(&new_sql_info);
         }
 
-        self.entries.insert(0, log_entry);
+        self.entries.push_front(log_entry);
     }
 }
 

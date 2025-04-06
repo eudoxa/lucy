@@ -139,11 +139,12 @@ pub fn build_detail_component(app: &App) -> Paragraph<'_> {
             for i in 0..visible_count {
                 let idx = total_entries - 1 - (start_idx + i);
                 if idx < total_entries {
-                    visible_logs.push(&group.entries[idx]);
+                    let log = &group.entries[idx];
+                    visible_logs.push(log);
                 }
             }
 
-            for log in visible_logs {
+            for log in &visible_logs {
                 let timestamp = log.timestamp.format("%H:%M:%S%.3f").to_string();
                 let message = if let Some(after_id) = strip_ansi_for_parsing(&log.message).find(']')
                 {

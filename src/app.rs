@@ -240,7 +240,7 @@ impl App {
     pub fn add_log_entry(&mut self, log_entry: LogEntry) {
         let is_new_request = self.state.add_log_entry(log_entry);
         if is_new_request {
-            self.next_request(1);
+            //self.next_request(1);
         }
         self.auto_scroll_if_needed();
     }
