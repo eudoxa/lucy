@@ -59,13 +59,6 @@ fn setup_tracing_subscriber() {
 
 fn setup_panic_handler() {
     panic::set_hook(Box::new(|panic_info| {
-        let _ = crossterm::terminal::disable_raw_mode();
-        let _ = crossterm::execute!(
-            io::stdout(),
-            crossterm::terminal::Clear(crossterm::terminal::ClearType::All),
-            crossterm::terminal::LeaveAlternateScreen,
-            crossterm::event::DisableMouseCapture,
-        );
         let backtrace = backtrace::Backtrace::new();
         let location = panic_info
             .location()
