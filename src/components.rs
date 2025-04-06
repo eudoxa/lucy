@@ -9,6 +9,9 @@ use ratatui::{
     widgets::{Block, BorderType, Borders, List, ListItem, Padding, Paragraph, Wrap},
 };
 
+const INDEX_OFFSET: usize = 1;
+const UI_OVERHEAD: usize = 4;
+
 pub fn build_list_component(app: &App) -> List<'_> {
     let mut items = Vec::with_capacity(app.state.request_ids.len());
 
@@ -84,7 +87,6 @@ pub fn build_detail_component(app: &App) -> Paragraph<'_> {
         Some(group) => {
             let is_finished = group.finished;
             let status_text = if is_finished { "Completed" } else { "Running" };
-
             let title_span = Span::styled(
                 format!(" Status: {} ", status_text),
                 Style::default()
@@ -95,7 +97,6 @@ pub fn build_detail_component(app: &App) -> Paragraph<'_> {
                     })
                     .add_modifier(Modifier::BOLD),
             );
-
             let mut text = Text::default();
 
             if let Some(entry) = group.entries.iter().find(|entry| {
@@ -131,7 +132,6 @@ pub fn build_detail_component(app: &App) -> Paragraph<'_> {
 
             for log in visible_logs {
                 let timestamp = log.timestamp.format("%H:%M:%S%.3f").to_string();
-
                 let message = if let Some(after_id) = strip_ansi_for_parsing(&log.message).find(']')
                 {
                     let raw_message = &log.message[(after_id + 1)..].trim();
@@ -139,13 +139,11 @@ pub fn build_detail_component(app: &App) -> Paragraph<'_> {
                 } else {
                     log.message.clone()
                 };
-
                 let mut spans = vec![Span::styled(
                     format!("[{}] ", timestamp),
                     Style::default().fg(Color::Gray),
                 )];
                 spans.extend(parse_ansi_colors(&message));
-
                 text.extend(Text::from(Line::from(spans)));
             }
 
@@ -167,12 +165,13 @@ pub fn build_detail_component(app: &App) -> Paragraph<'_> {
             "0/0".to_string()
         } else {
             let detail_scroll_offset = app.app_view.get_scroll_offset(Panel::RequestDetail);
-            let start_idx = detail_scroll_offset + 1;
+            let start_idx = detail_scroll_offset + INDEX_OFFSET;
             let viewport_height = app.app_view.viewport_height(Panel::RequestDetail);
             let need_height =
                 paragraph.line_count(app.app_view.get_viewport_width(Panel::RequestDetail) as u16);
             let overflow_lines = need_height.saturating_sub(viewport_height);
-            let end_idx = (start_idx + viewport_height - 4 - overflow_lines).min(total_entries);
+            let end_idx =
+                (start_idx + viewport_height - UI_OVERHEAD - overflow_lines).min(total_entries);
             format!("{}-{}/{}", start_idx, end_idx, total_entries)
         }
     } else {
@@ -230,8 +229,8 @@ pub fn build_log_stream_component(app: &App) -> Paragraph<'_> {
         "0/0".to_string()
     } else {
         let all_scroll_offset = app.app_view.get_scroll_offset(Panel::LogStream);
-        let start_idx = all_scroll_offset + 1;
-        let end_idx = (start_idx + viewport_height - 1).min(total_logs);
+        let start_idx = all_scroll_offset + INDEX_OFFSET;
+        let end_idx = (start_idx + viewport_height - INDEX_OFFSET).min(total_logs);
         format!("{}-{}/{}", start_idx, end_idx, total_logs)
     };
 

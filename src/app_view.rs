@@ -1,5 +1,11 @@
 use crate::layout::{LayoutInfo, Panel};
 
+#[derive(Debug, Clone, Copy)]
+pub enum ScrollDirection {
+    Up(usize),
+    Down(usize),
+}
+
 pub struct AppView {
     pub focused_panel: Panel,
     pub scroll_offsets: std::collections::HashMap<Panel, usize>,
@@ -33,23 +39,13 @@ impl AppView {
         }
     }
 
-    pub fn apply_scroll(&mut self, panel: Panel, delta: i8, max_scroll: usize) {
+    pub fn apply_scroll(&mut self, panel: Panel, direction: ScrollDirection, max_scroll: usize) {
         let current = self.get_scroll_offset(panel);
-        tracing::debug!("current: {}", current);
-
-        match delta.cmp(&0) {
-            std::cmp::Ordering::Greater => {
-                let new_offset = (current + delta as usize).min(max_scroll);
-                tracing::debug!("new_offset: {}", new_offset);
-                self.set_scroll_offset(panel, new_offset);
-            }
-            std::cmp::Ordering::Less => {
-                let new_offset = current.saturating_sub(delta.unsigned_abs() as usize);
-                tracing::debug!("new_offset: {}", new_offset);
-                self.set_scroll_offset(panel, new_offset);
-            }
-            std::cmp::Ordering::Equal => {}
-        }
+        let new_offset = match direction {
+            ScrollDirection::Down(amount) => (current + amount).min(max_scroll),
+            ScrollDirection::Up(amount) => current.saturating_sub(amount),
+        };
+        self.set_scroll_offset(panel, new_offset);
     }
 
     pub fn viewport_height(&self, panel: Panel) -> usize {

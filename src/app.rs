@@ -1,16 +1,18 @@
 use crate::app_state::{AppState, LogEntry};
-use crate::app_view::AppView;
+use crate::app_view::{AppView, ScrollDirection};
 use crate::components;
 use crate::layout::{LayoutInfo, Panel};
 use crossterm::event::{self, Event, KeyCode};
+
+const SCROLL_UNIT: usize = 1;
+const SCROLL_PAGE_SIZE: usize = 10;
+const REQUEST_SKIP_COUNT: usize = 3;
 
 pub struct App {
     pub state: AppState,
     pub app_view: AppView,
     pub copy_mode_enabled: bool,
 }
-
-static SCROLL_PAGE_SIZE: i8 = 5;
 
 impl App {
     pub fn new() -> Self {
@@ -91,16 +93,16 @@ impl App {
                             {
                                 match self.app_view.focused_panel {
                                     Panel::RequestList => {
-                                        self.next_request(3);
+                                        self.next_request(REQUEST_SKIP_COUNT);
                                     }
-                                    Panel::RequestDetail => {
-                                        self.apply_scroll_to(Panel::RequestDetail, SCROLL_PAGE_SIZE)
-                                    }
-                                    Panel::LogStream => {
-                                        self.apply_scroll_to(Panel::LogStream, SCROLL_PAGE_SIZE)
-                                    }
+                                    Panel::RequestDetail => self.apply_scroll_to(
+                                        Panel::RequestDetail,
+                                        SCROLL_PAGE_SIZE as i8,
+                                    ),
+                                    Panel::LogStream => self
+                                        .apply_scroll_to(Panel::LogStream, SCROLL_PAGE_SIZE as i8),
                                     Panel::SqlInfo => {
-                                        self.apply_scroll_to(Panel::SqlInfo, SCROLL_PAGE_SIZE)
+                                        self.apply_scroll_to(Panel::SqlInfo, SCROLL_PAGE_SIZE as i8)
                                     }
                                 }
                             }
@@ -109,39 +111,47 @@ impl App {
                             {
                                 match self.app_view.focused_panel {
                                     Panel::RequestList => {
-                                        self.previous_request(3);
+                                        self.previous_request(REQUEST_SKIP_COUNT);
                                     }
-                                    Panel::RequestDetail => self
-                                        .apply_scroll_to(Panel::RequestDetail, -SCROLL_PAGE_SIZE),
-                                    Panel::LogStream => {
-                                        self.apply_scroll_to(Panel::LogStream, -SCROLL_PAGE_SIZE)
-                                    }
-                                    Panel::SqlInfo => {
-                                        self.apply_scroll_to(Panel::SqlInfo, -SCROLL_PAGE_SIZE)
-                                    }
+                                    Panel::RequestDetail => self.apply_scroll_to(
+                                        Panel::RequestDetail,
+                                        -(SCROLL_PAGE_SIZE as i8),
+                                    ),
+                                    Panel::LogStream => self.apply_scroll_to(
+                                        Panel::LogStream,
+                                        -(SCROLL_PAGE_SIZE as i8),
+                                    ),
+                                    Panel::SqlInfo => self
+                                        .apply_scroll_to(Panel::SqlInfo, -(SCROLL_PAGE_SIZE as i8)),
                                 }
                             }
                             _ => match self.app_view.focused_panel {
                                 Panel::RequestList => match key.code {
-                                    KeyCode::Char('j') | KeyCode::Down => self.next_request(1),
-                                    KeyCode::Char('k') | KeyCode::Up => self.previous_request(1),
+                                    KeyCode::Char('j') | KeyCode::Down => {
+                                        self.next_request(SCROLL_UNIT)
+                                    }
+                                    KeyCode::Char('k') | KeyCode::Up => {
+                                        self.previous_request(SCROLL_UNIT)
+                                    }
                                     _ => {}
                                 },
                                 Panel::RequestDetail | Panel::LogStream | Panel::SqlInfo => {
                                     match key.code {
-                                        KeyCode::Char('j') | KeyCode::Down => {
-                                            self.apply_scroll_to(self.app_view.focused_panel, 1)
-                                        }
-                                        KeyCode::Char('k') | KeyCode::Up => {
-                                            self.apply_scroll_to(self.app_view.focused_panel, -1)
-                                        }
+                                        KeyCode::Char('j') | KeyCode::Down => self.apply_scroll_to(
+                                            self.app_view.focused_panel,
+                                            SCROLL_UNIT as i8,
+                                        ),
+                                        KeyCode::Char('k') | KeyCode::Up => self.apply_scroll_to(
+                                            self.app_view.focused_panel,
+                                            -(SCROLL_UNIT as i8),
+                                        ),
                                         KeyCode::PageDown => self.apply_scroll_to(
                                             self.app_view.focused_panel,
-                                            SCROLL_PAGE_SIZE,
+                                            SCROLL_PAGE_SIZE as i8,
                                         ),
                                         KeyCode::PageUp => self.apply_scroll_to(
                                             self.app_view.focused_panel,
-                                            -SCROLL_PAGE_SIZE,
+                                            -(SCROLL_PAGE_SIZE as i8),
                                         ),
                                         _ => {}
                                     }
@@ -188,7 +198,7 @@ impl App {
         }
     }
 
-    fn apply_scroll_to(&mut self, panel: Panel, n: i8) {
+    fn apply_scroll_to(&mut self, panel: Panel, amount: i8) {
         let max_scroll = match panel {
             Panel::RequestDetail => self.get_max_detail_scroll(),
             Panel::LogStream => self.get_max_stream_scroll(),
@@ -196,7 +206,13 @@ impl App {
             _ => 0,
         };
 
-        self.app_view.apply_scroll(panel, n, max_scroll);
+        let direction = if amount < 0 {
+            ScrollDirection::Up(amount.unsigned_abs() as usize)
+        } else {
+            ScrollDirection::Down(amount as usize)
+        };
+
+        self.app_view.apply_scroll(panel, direction, max_scroll);
     }
 
     fn get_max_detail_scroll(&self) -> usize {
@@ -259,13 +275,17 @@ impl App {
             event::MouseEventKind::ScrollDown | event::MouseEventKind::ScrollUp => {
                 match self.app_view.panel_at_point(x, y) {
                     Some(Panel::RequestList) => match mouse_event.kind {
-                        event::MouseEventKind::ScrollDown => self.next_request(1),
-                        event::MouseEventKind::ScrollUp => self.previous_request(1),
+                        event::MouseEventKind::ScrollDown => self.next_request(SCROLL_UNIT),
+                        event::MouseEventKind::ScrollUp => self.previous_request(SCROLL_UNIT),
                         _ => {}
                     },
                     Some(panel) => match mouse_event.kind {
-                        event::MouseEventKind::ScrollDown => self.apply_scroll_to(panel, 1),
-                        event::MouseEventKind::ScrollUp => self.apply_scroll_to(panel, -1),
+                        event::MouseEventKind::ScrollDown => {
+                            self.apply_scroll_to(panel, SCROLL_UNIT as i8)
+                        }
+                        event::MouseEventKind::ScrollUp => {
+                            self.apply_scroll_to(panel, -(SCROLL_UNIT as i8))
+                        }
                         _ => {}
                     },
                     None => {}
