@@ -168,3 +168,82 @@ impl AppState {
         self.all_logs.len()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Local;
+
+    #[test]
+    fn test_app_state_new() {
+        let state = AppState::new();
+        assert_eq!(state.selected_index, 0);
+        assert!(state.request_ids.is_empty());
+        assert!(state.logs_by_request_id.is_empty());
+        assert!(state.all_logs.is_empty());
+    }
+
+    #[test]
+    fn test_select_request() {
+        let mut state = AppState::new();
+
+        // Cannot select in empty state
+        assert!(!state.select_request(0));
+
+        // Add a request
+        let log_entry = LogEntry {
+            timestamp: Local::now(),
+            request_id: "test-id".to_string(),
+            message: "Started GET /test".to_string(),
+        };
+        state.add_log_entry(log_entry);
+
+        // Select valid index
+        assert!(state.select_request(0));
+        assert_eq!(state.selected_index, 0);
+
+        // Cannot select out of range index
+        assert!(!state.select_request(1));
+    }
+
+    #[test]
+    fn test_add_log_entry() {
+        let mut state = AppState::new();
+
+        // Add new request
+        let log_entry = LogEntry {
+            timestamp: Local::now(),
+            request_id: "req-1".to_string(),
+            message: "Started GET /test".to_string(),
+        };
+
+        let is_new = state.add_log_entry(log_entry);
+        assert!(is_new);
+        assert_eq!(state.request_ids.len(), 1);
+        assert_eq!(state.all_logs.len(), 1);
+
+        // Add entry with same request ID
+        let log_entry2 = LogEntry {
+            timestamp: Local::now(),
+            request_id: "req-1".to_string(),
+            message: "Processing by TestController".to_string(),
+        };
+
+        let is_new2 = state.add_log_entry(log_entry2);
+        assert!(!is_new2);
+        assert_eq!(state.request_ids.len(), 1);
+        assert_eq!(state.all_logs.len(), 2);
+
+        // Add entry with different request ID
+        let log_entry3 = LogEntry {
+            timestamp: Local::now(),
+            request_id: "req-2".to_string(),
+            message: "Started GET /another".to_string(),
+        };
+
+        let is_new3 = state.add_log_entry(log_entry3);
+        assert!(is_new3);
+        assert_eq!(state.request_ids.len(), 2);
+        assert_eq!(state.all_logs.len(), 3);
+    }
+}

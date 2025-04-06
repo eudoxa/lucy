@@ -344,3 +344,21 @@ fn parse_ansi_colors(text: &str) -> Vec<Span<'static>> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_ansi_colors() {
+        let plain_text = "Hello, world!";
+        let spans = parse_ansi_colors(plain_text);
+        assert_eq!(spans.len(), 1);
+        assert_eq!(spans[0].content, "Hello, world!");
+
+        let colored_text = "\x1b[31mRed text\x1b[0m";
+        let spans = parse_ansi_colors(colored_text);
+        assert!(spans.len() >= 1);
+        assert!(spans.iter().any(|span| span.content.contains("Red text")));
+    }
+}
