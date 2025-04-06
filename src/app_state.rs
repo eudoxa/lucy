@@ -140,6 +140,10 @@ impl AppState {
                 .insert(request_id.clone(), new_group);
 
             self.request_ids.insert(0, request_id);
+            // 新しいリクエストが追加された場合、選択中のインデックスをずらす
+            if self.selected_index > 0 || self.request_ids.len() > 1 {
+                self.selected_index = self.selected_index.saturating_add(1);
+            }
         } else if let Some(group) = self.logs_by_request_id.get_mut(&request_id) {
             group.add_entry(log_entry);
         }
@@ -227,6 +231,7 @@ mod tests {
         assert_eq!(state.request_ids().len(), 1);
         assert_eq!(state.request_ids()[0], "req-1");
         assert_eq!(state.all_logs.len(), 1);
+        assert_eq!(state.selected_index, 0);
 
         // Add entry with same request ID
         let log_entry2 = LogEntry {
@@ -239,6 +244,7 @@ mod tests {
         assert!(!is_new2);
         assert_eq!(state.request_ids().len(), 1);
         assert_eq!(state.all_logs.len(), 2);
+        assert_eq!(state.selected_index, 0);
 
         // Add entry with different request ID
         let log_entry3 = LogEntry {
@@ -253,6 +259,44 @@ mod tests {
         assert_eq!(state.request_ids()[0], "req-2");
         assert_eq!(state.request_ids()[1], "req-1");
         assert_eq!(state.all_logs.len(), 3);
+        assert_eq!(state.selected_index, 1);
+    }
+
+    #[test]
+    fn test_selected_index_adjustment() {
+        let mut state = AppState::new();
+        assert_eq!(state.selected_index, 0);
+
+        // 最初のリクエストを追加
+        let log_entry1 = LogEntry {
+            timestamp: Local::now(),
+            request_id: "req-1".to_string(),
+            message: "Started GET /test1".to_string(),
+        };
+        state.add_log_entry(log_entry1);
+        assert_eq!(state.selected_index, 0);
+
+        // 2つ目のリクエストを追加（インデックスは1に調整される）
+        let log_entry2 = LogEntry {
+            timestamp: Local::now(),
+            request_id: "req-2".to_string(),
+            message: "Started GET /test2".to_string(),
+        };
+        state.add_log_entry(log_entry2);
+        assert_eq!(state.selected_index, 1);
+
+        // 手動で最新（インデックス0）を選択
+        state.select_request(0);
+        assert_eq!(state.selected_index, 0);
+
+        // 3つ目のリクエストを追加（最新を選択していたのでインデックスは1に調整される）
+        let log_entry3 = LogEntry {
+            timestamp: Local::now(),
+            request_id: "req-3".to_string(),
+            message: "Started GET /test3".to_string(),
+        };
+        state.add_log_entry(log_entry3);
+        assert_eq!(state.selected_index, 1);
     }
 
     #[test]
