@@ -22,8 +22,8 @@ impl Reader {
 }
 
 fn process_input(input: Stdin, tx: Sender<String>) {
-    let mut reader = BufReader::with_capacity(16 * 1024, input);
-    let mut buffer = String::with_capacity(512);
+    let mut reader = BufReader::with_capacity(32 * 1024, input);
+    let mut buffer = String::with_capacity(1024);
     let wait_time = Duration::from_millis(1);
 
     loop {

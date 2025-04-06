@@ -66,13 +66,28 @@ pub fn build_list_component(app: &App) -> List<'_> {
         _ => Style::default().fg(Color::DarkGray),
     };
 
+    let total_requests = app.state.log_group_count();
+    let scroll_info = if total_requests == 0 {
+        "0/0".to_string()
+    } else {
+        let start_idx = current_offset + INDEX_OFFSET;
+        let end_idx = (start_idx + visible_count - INDEX_OFFSET).min(total_requests);
+        format!("{}-{}/{}", start_idx, end_idx, total_requests)
+    };
+
+    let title_text = format!(" Requests [{}] ", scroll_info);
+    let title_style = match app.app_view.focused_panel {
+        Panel::RequestList => Style::default().fg(Color::Yellow),
+        _ => Style::default().fg(Color::White),
+    };
+
     List::new(items).block(
         Block::default()
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded)
             .border_style(border_style)
             .padding(Padding::new(1, 1, 1, 1))
-            .title(" Requests"),
+            .title(Span::styled(title_text, title_style)),
     )
 }
 
@@ -355,7 +370,7 @@ mod tests {
 
         let colored_text = "\x1b[31mRed text\x1b[0m";
         let spans = parse_ansi_colors(colored_text);
-        assert!(spans.len() >= 1);
+        assert!(!spans.is_empty());
         assert!(spans.iter().any(|span| span.content.contains("Red text")));
     }
 }

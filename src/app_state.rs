@@ -1,8 +1,9 @@
 use crate::sql_info::SqlQueryInfo;
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 
 pub struct AppState {
-    pub logs_by_request_id: BTreeMap<String, LogGroup>,
+    pub logs_by_request_id: HashMap<String, LogGroup>,
+    pub request_ids: Vec<String>,
     pub selected_index: usize,
     pub all_logs: Vec<LogEntry>,
 }
@@ -62,14 +63,15 @@ pub struct LogEntry {
 impl AppState {
     pub fn new() -> Self {
         Self {
-            logs_by_request_id: BTreeMap::new(),
+            logs_by_request_id: HashMap::new(),
+            request_ids: Vec::new(),
             selected_index: 0,
             all_logs: Vec::new(),
         }
     }
 
     pub fn request_ids(&self) -> Vec<&String> {
-        self.logs_by_request_id.keys().collect()
+        self.request_ids.iter().collect()
     }
 
     pub fn selected_request_id(&self) -> Option<&String> {
@@ -134,13 +136,10 @@ impl AppState {
 
         if is_new_request {
             let new_group = LogGroup::new(&log_entry);
-            if self.request_ids().len() == 1 {
-                self.selected_index = 0;
-            } else {
-                self.selected_index += 1;
-            }
+            self.logs_by_request_id
+                .insert(request_id.clone(), new_group);
 
-            self.logs_by_request_id.insert(request_id, new_group);
+            self.request_ids.insert(0, request_id);
         } else if let Some(group) = self.logs_by_request_id.get_mut(&request_id) {
             group.add_entry(log_entry);
         }
@@ -185,6 +184,7 @@ mod tests {
         assert_eq!(state.selected_index, 0);
         assert!(state.request_ids().is_empty());
         assert!(state.logs_by_request_id.is_empty());
+        assert!(state.request_ids.is_empty());
         assert!(state.all_logs.is_empty());
     }
 
@@ -225,6 +225,7 @@ mod tests {
         let is_new = state.add_log_entry(log_entry);
         assert!(is_new);
         assert_eq!(state.request_ids().len(), 1);
+        assert_eq!(state.request_ids()[0], "req-1");
         assert_eq!(state.all_logs.len(), 1);
 
         // Add entry with same request ID
@@ -249,6 +250,33 @@ mod tests {
         let is_new3 = state.add_log_entry(log_entry3);
         assert!(is_new3);
         assert_eq!(state.request_ids().len(), 2);
+        assert_eq!(state.request_ids()[0], "req-2");
+        assert_eq!(state.request_ids()[1], "req-1");
         assert_eq!(state.all_logs.len(), 3);
+    }
+
+    #[test]
+    fn test_time_order_preservation() {
+        let mut state = AppState::new();
+
+        let requests = ["req-3", "req-2", "req-1"];
+
+        for &req_id in &requests {
+            let log_entry = LogEntry {
+                timestamp: Local::now(),
+                request_id: req_id.to_string(),
+                message: format!("Started GET /{}", req_id),
+            };
+            state.add_log_entry(log_entry);
+        }
+
+        assert_eq!(state.request_ids()[0], "req-1");
+        assert_eq!(state.request_ids()[1], "req-2");
+        assert_eq!(state.request_ids()[2], "req-3");
+
+        let ids = state.request_ids();
+        assert_eq!(*ids[0], "req-1");
+        assert_eq!(*ids[1], "req-2");
+        assert_eq!(*ids[2], "req-3");
     }
 }

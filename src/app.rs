@@ -239,9 +239,8 @@ impl App {
 
     pub fn add_log_entry(&mut self, log_entry: LogEntry) {
         let is_new_request = self.state.add_log_entry(log_entry);
-        if is_new_request && matches!(self.app_view.focused_panel, Panel::RequestList) {
-            self.app_view
-                .adjust_scroll_for_index(Panel::RequestList, self.state.selected_index);
+        if is_new_request {
+            self.next_request(1);
         }
         self.auto_scroll_if_needed();
     }
@@ -341,31 +340,6 @@ impl App {
     }
 
     fn adjust_all_scroll_positions(&mut self) {
-        self.adjust_request_list_scroll();
-
         self.auto_scroll_if_needed();
-    }
-
-    fn adjust_request_list_scroll(&mut self) {
-        let viewport_height = self.app_view.viewport_height(Panel::RequestList);
-
-        if self.state.log_group_count() > viewport_height {
-            let current_offset = self.app_view.get_scroll_offset(Panel::RequestList);
-
-            let new_offset = if self.state.selected_index < current_offset {
-                self.state.selected_index
-            } else if self.state.selected_index >= current_offset + viewport_height {
-                self.state
-                    .selected_index
-                    .saturating_sub(viewport_height - 1)
-            } else {
-                current_offset
-            };
-
-            self.app_view
-                .set_scroll_offset(Panel::RequestList, new_offset);
-        } else {
-            self.app_view.set_scroll_offset(Panel::RequestList, 0);
-        }
     }
 }
