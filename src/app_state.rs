@@ -1,11 +1,10 @@
 use crate::sql_info::SqlQueryInfo;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 
 pub struct AppState {
     pub logs_by_request_id: BTreeMap<String, LogGroup>,
     pub selected_index: usize,
     pub request_ids: Vec<String>,
-    pub first_timestamps: HashMap<String, chrono::DateTime<chrono::Local>>,
     pub all_logs: Vec<LogEntry>,
 }
 
@@ -14,6 +13,7 @@ pub struct LogGroup {
     pub entries: Vec<LogEntry>,
     pub finished: bool,
     pub sql_query_info: SqlQueryInfo,
+    pub first_timestamp: chrono::DateTime<chrono::Local>,
 }
 
 impl LogGroup {
@@ -23,6 +23,7 @@ impl LogGroup {
             entries: Vec::with_capacity(10),
             finished: false,
             sql_query_info: SqlQueryInfo::new(),
+            first_timestamp: log_entry.timestamp,
         };
 
         group.add_entry(log_entry.clone());
@@ -65,7 +66,6 @@ impl AppState {
             logs_by_request_id: BTreeMap::new(),
             selected_index: 0,
             request_ids: Vec::new(),
-            first_timestamps: HashMap::new(),
             all_logs: Vec::new(),
         }
     }
@@ -126,8 +126,6 @@ impl AppState {
         if is_new_request {
             let new_group = LogGroup::new(&log_entry);
             self.request_ids.insert(0, request_id.clone());
-            self.first_timestamps
-                .insert(request_id.clone(), log_entry.timestamp);
 
             if self.request_ids.len() == 1 {
                 self.selected_index = 0;

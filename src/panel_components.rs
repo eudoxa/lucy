@@ -27,12 +27,9 @@ pub fn build_list_component(app: &App) -> List<'_> {
         }
 
         let request_id = &app.state.request_ids[index];
-        let time_str = app.state.first_timestamps.get(request_id).map_or_else(
-            || "??:??:??".to_string(),
-            |ts| ts.format("%H:%M:%S").to_string(),
-        );
-
         let group = app.state.logs_by_request_id.get(request_id).unwrap();
+        let time_str = group.first_timestamp.format("%H:%M:%S").to_string();
+
         let finished = group.finished;
         let title = group.title.clone();
 
