@@ -1,7 +1,7 @@
 use crate::app_state::{AppState, LogEntry};
 use crate::app_view::{AppView, ScrollDirection};
-use crate::components;
 use crate::layout::{LayoutInfo, Panel};
+use crate::panel_components;
 use crossterm::event::{self, Event, KeyCode};
 
 const SCROLL_UNIT: usize = 1;
@@ -32,16 +32,16 @@ impl App {
         let log_stream_region = self.app_view.layout_info.region(Panel::LogStream);
         let sql_info_region = self.app_view.layout_info.region(Panel::SqlInfo);
 
-        let request_list = components::build_list_component(self);
+        let request_list = panel_components::build_list_component(self);
         f.render_widget(request_list, request_list_region);
 
-        let detail_panel = components::build_detail_component(self);
+        let detail_panel = panel_components::build_detail_component(self);
         f.render_widget(detail_panel, request_detail_region);
 
-        let log_stream = components::build_log_stream_component(self);
+        let log_stream = panel_components::build_log_stream_component(self);
         f.render_widget(log_stream, log_stream_region);
 
-        let sql_panel = components::build_sql_component(self);
+        let sql_panel = panel_components::build_sql_component(self);
         f.render_widget(sql_panel, sql_info_region);
     }
 

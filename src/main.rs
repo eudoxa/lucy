@@ -7,9 +7,9 @@ use std::{
 mod app;
 mod app_state;
 mod app_view;
-mod components;
 mod layout;
 mod log_parser;
+mod panel_components;
 mod sql_info;
 
 struct CleanGuard<'a, B: ratatui::backend::Backend> {

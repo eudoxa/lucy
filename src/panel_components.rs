@@ -64,11 +64,9 @@ pub fn build_list_component(app: &App) -> List<'_> {
         items.push(ListItem::new(content).style(style));
     }
 
-    let is_active = matches!(app.app_view.focused_panel, Panel::RequestList);
-    let border_style = if is_active {
-        Style::default().fg(Color::White)
-    } else {
-        Style::default().fg(Color::DarkGray)
+    let border_style = match app.app_view.focused_panel {
+        Panel::RequestList => Style::default().fg(Color::White),
+        _ => Style::default().fg(Color::DarkGray),
     };
 
     List::new(items).block(
@@ -82,23 +80,26 @@ pub fn build_list_component(app: &App) -> List<'_> {
 }
 
 pub fn build_detail_component(app: &App) -> Paragraph<'_> {
-    let (title_span, log_text) = match app.state.selected_group() {
+    let (_title_span, log_text) = match app.state.selected_group() {
         None => (Span::raw("Logs"), Text::from("Waiting for logs...")),
         Some(group) => {
-            let is_finished = group.finished;
-            let status_text = if is_finished { "Completed" } else { "Running" };
-            let title_span = Span::styled(
-                format!(" Status: {} ", status_text),
-                Style::default()
-                    .fg(if is_finished {
-                        Color::Green
-                    } else {
-                        Color::Yellow
-                    })
-                    .add_modifier(Modifier::BOLD),
-            );
-            let mut text = Text::default();
+            let title_span = if group.finished {
+                Span::styled(
+                    "Completed",
+                    Style::default()
+                        .fg(Color::Green)
+                        .add_modifier(Modifier::BOLD),
+                )
+            } else {
+                Span::styled(
+                    "Running",
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD),
+                )
+            };
 
+            let mut text = Text::default();
             if let Some(entry) = group.entries.iter().find(|entry| {
                 let msg = &entry.message;
                 msg.contains("Started GET")
@@ -151,11 +152,9 @@ pub fn build_detail_component(app: &App) -> Paragraph<'_> {
         }
     };
 
-    let is_active = matches!(app.app_view.focused_panel, Panel::RequestDetail);
-    let border_style = if is_active {
-        Style::default().fg(Color::White)
-    } else {
-        Style::default().fg(Color::DarkGray)
+    let border_style = match app.app_view.focused_panel {
+        Panel::RequestDetail => Style::default().fg(Color::White),
+        _ => Style::default().fg(Color::DarkGray),
     };
     let paragraph = Paragraph::new(log_text);
 
@@ -179,18 +178,14 @@ pub fn build_detail_component(app: &App) -> Paragraph<'_> {
     };
 
     let title_text = format!(" [{}] ", scroll_info);
+    let title_style = match app.app_view.focused_panel {
+        Panel::RequestDetail => Style::default().fg(Color::Yellow),
+        _ => Style::default().fg(Color::White),
+    };
     let block = Block::default()
         .padding(Padding::new(1, 1, 1, 1))
         .title_alignment(ratatui::layout::Alignment::Right)
-        .title(title_span)
-        .title(Span::styled(
-            title_text,
-            Style::default().fg(if is_active {
-                Color::Yellow
-            } else {
-                Color::White
-            }),
-        ))
+        .title(Span::styled(title_text, title_style))
         .borders(Borders::ALL)
         .border_style(border_style);
 
@@ -234,11 +229,13 @@ pub fn build_log_stream_component(app: &App) -> Paragraph<'_> {
         format!("{}-{}/{}", start_idx, end_idx, total_logs)
     };
 
-    let is_active = matches!(app.app_view.focused_panel, Panel::LogStream);
-    let border_style = if is_active {
-        Style::default().fg(Color::White)
-    } else {
-        Style::default().fg(Color::DarkGray)
+    let border_style = match app.app_view.focused_panel {
+        Panel::LogStream => Style::default().fg(Color::White),
+        _ => Style::default().fg(Color::DarkGray),
+    };
+    let bottom_style = match app.app_view.focused_panel {
+        Panel::LogStream => Style::default().fg(Color::Yellow),
+        _ => Style::default().fg(Color::DarkGray),
     };
 
     let title_text = format!(" All Logs Stream [{}] ", scroll_info);
@@ -249,21 +246,8 @@ pub fn build_log_stream_component(app: &App) -> Paragraph<'_> {
         .title(title_text)
         .title_alignment(ratatui::layout::Alignment::Left)
         .title_bottom(
-            Line::from(vec![Span::styled(
-                copy_mode_text,
-                Style::default()
-                    .fg(if app.copy_mode_enabled {
-                        Color::Yellow
-                    } else {
-                        Color::DarkGray
-                    })
-                    .add_modifier(if app.copy_mode_enabled {
-                        Modifier::BOLD
-                    } else {
-                        Modifier::empty()
-                    }),
-            )])
-            .alignment(ratatui::layout::Alignment::Right),
+            Line::from(vec![Span::styled(copy_mode_text, bottom_style)])
+                .alignment(ratatui::layout::Alignment::Right),
         );
 
     Paragraph::new(log_text)
@@ -273,15 +257,12 @@ pub fn build_log_stream_component(app: &App) -> Paragraph<'_> {
 }
 
 pub fn build_sql_component(app: &App) -> Paragraph<'_> {
-    let is_active = matches!(app.app_view.focused_panel, Panel::SqlInfo);
-    let border_style = if is_active {
-        Style::default().fg(Color::White)
-    } else {
-        Style::default().fg(Color::DarkGray)
+    let border_style = match app.app_view.focused_panel {
+        Panel::SqlInfo => Style::default().fg(Color::White),
+        _ => Style::default().fg(Color::DarkGray),
     };
 
     let mut text = Text::default();
-
     if let Some(group) = app.state.selected_group() {
         let sql_info = &group.sql_query_info;
 
@@ -309,7 +290,6 @@ pub fn build_sql_component(app: &App) -> Paragraph<'_> {
 
         if !sql_info.table_counts.is_empty() {
             text.extend(Text::from(Line::from("")));
-
             for (table, count) in sql_info.sorted_tables() {
                 text.extend(Text::from(Line::from(vec![
                     Span::styled(
