@@ -13,20 +13,20 @@ const INDEX_OFFSET: usize = 1;
 const UI_OVERHEAD: usize = 4;
 
 pub fn build_list_component(app: &App) -> List<'_> {
-    let mut items = Vec::with_capacity(app.state.request_ids.len());
+    let mut items = Vec::with_capacity(app.state.log_group_count());
 
     let viewport_height = app.app_view.viewport_height(Panel::RequestList);
     let current_offset = app.app_view.get_scroll_offset(Panel::RequestList);
     let visible_count =
-        viewport_height.min(app.state.request_ids.len().saturating_sub(current_offset));
+        viewport_height.min(app.state.log_group_count().saturating_sub(current_offset));
     let end_idx = current_offset + visible_count;
 
     for index in current_offset..end_idx {
-        if index >= app.state.request_ids.len() {
+        if index >= app.state.log_group_count() {
             break;
         }
 
-        let request_id = &app.state.request_ids[index];
+        let request_id = app.state.request_ids()[index];
         let group = app.state.logs_by_request_id.get(request_id).unwrap();
         let time_str = group.first_timestamp.format("%H:%M:%S").to_string();
 

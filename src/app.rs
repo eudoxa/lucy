@@ -301,7 +301,7 @@ impl App {
                         let current_offset = self.app_view.get_scroll_offset(Panel::RequestList);
                         let clicked_index = current_offset + row_in_list as usize;
 
-                        if clicked_index < self.state.request_ids.len() {
+                        if clicked_index < self.state.request_ids().len() {
                             self.select_request(clicked_index);
                         }
                     }
@@ -349,7 +349,7 @@ impl App {
     fn adjust_request_list_scroll(&mut self) {
         let viewport_height = self.app_view.viewport_height(Panel::RequestList);
 
-        if self.state.request_ids.len() > viewport_height {
+        if self.state.log_group_count() > viewport_height {
             let current_offset = self.app_view.get_scroll_offset(Panel::RequestList);
 
             let new_offset = if self.state.selected_index < current_offset {

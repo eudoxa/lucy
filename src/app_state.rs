@@ -4,7 +4,6 @@ use std::collections::BTreeMap;
 pub struct AppState {
     pub logs_by_request_id: BTreeMap<String, LogGroup>,
     pub selected_index: usize,
-    pub request_ids: Vec<String>,
     pub all_logs: Vec<LogEntry>,
 }
 
@@ -65,13 +64,23 @@ impl AppState {
         Self {
             logs_by_request_id: BTreeMap::new(),
             selected_index: 0,
-            request_ids: Vec::new(),
             all_logs: Vec::new(),
         }
     }
 
+    pub fn request_ids(&self) -> Vec<&String> {
+        self.logs_by_request_id.keys().collect()
+    }
+
     pub fn selected_request_id(&self) -> Option<&String> {
-        self.request_ids.get(self.selected_index)
+        match self.request_ids().get(self.selected_index) {
+            Some(id) => Some(*id),
+            None => None,
+        }
+    }
+
+    pub fn log_group_count(&self) -> usize {
+        self.logs_by_request_id.len()
     }
 
     pub fn selected_group(&self) -> Option<&LogGroup> {
@@ -80,7 +89,7 @@ impl AppState {
     }
 
     pub fn select_request(&mut self, index: usize) -> bool {
-        if index < self.request_ids.len() {
+        if index < self.request_ids().len() {
             self.selected_index = index;
             true
         } else {
@@ -89,15 +98,15 @@ impl AppState {
     }
 
     pub fn next_request(&mut self, n: usize) -> bool {
-        if self.request_ids.is_empty() || n == 0 {
+        if self.request_ids().is_empty() || n == 0 {
             return false;
         }
-        let new_index = (self.selected_index + n).min(self.request_ids.len() - 1);
+        let new_index = (self.selected_index + n).min(self.request_ids().len() - 1);
         self.select_request(new_index)
     }
 
     pub fn previous_request(&mut self, n: usize) -> bool {
-        if self.request_ids.is_empty() || n == 0 {
+        if self.request_ids().is_empty() || n == 0 {
             return false;
         }
         let new_index = self.selected_index.saturating_sub(n);
@@ -125,9 +134,7 @@ impl AppState {
 
         if is_new_request {
             let new_group = LogGroup::new(&log_entry);
-            self.request_ids.insert(0, request_id.clone());
-
-            if self.request_ids.len() == 1 {
+            if self.request_ids().len() == 1 {
                 self.selected_index = 0;
             } else {
                 self.selected_index += 1;
@@ -176,7 +183,7 @@ mod tests {
     fn test_app_state_new() {
         let state = AppState::new();
         assert_eq!(state.selected_index, 0);
-        assert!(state.request_ids.is_empty());
+        assert!(state.request_ids().is_empty());
         assert!(state.logs_by_request_id.is_empty());
         assert!(state.all_logs.is_empty());
     }
@@ -217,7 +224,7 @@ mod tests {
 
         let is_new = state.add_log_entry(log_entry);
         assert!(is_new);
-        assert_eq!(state.request_ids.len(), 1);
+        assert_eq!(state.request_ids().len(), 1);
         assert_eq!(state.all_logs.len(), 1);
 
         // Add entry with same request ID
@@ -229,7 +236,7 @@ mod tests {
 
         let is_new2 = state.add_log_entry(log_entry2);
         assert!(!is_new2);
-        assert_eq!(state.request_ids.len(), 1);
+        assert_eq!(state.request_ids().len(), 1);
         assert_eq!(state.all_logs.len(), 2);
 
         // Add entry with different request ID
@@ -241,7 +248,7 @@ mod tests {
 
         let is_new3 = state.add_log_entry(log_entry3);
         assert!(is_new3);
-        assert_eq!(state.request_ids.len(), 2);
+        assert_eq!(state.request_ids().len(), 2);
         assert_eq!(state.all_logs.len(), 3);
     }
 }
