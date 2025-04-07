@@ -197,7 +197,7 @@ pub fn build_log_stream_component(app: &App) -> Paragraph<'_> {
     let viewport_height = app.app_view.viewport_height(Panel::LogStream);
 
     if total_logs > 0 {
-        let visible_logs = app.get_visible_logs(viewport_height);
+        let visible_logs = app.get_visible_all_logs(viewport_height);
 
         for log in visible_logs.into_iter() {
             let timestamp = log.timestamp.format("%H:%M:%S%.3f").to_string();

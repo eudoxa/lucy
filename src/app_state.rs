@@ -151,25 +151,11 @@ impl AppState {
         is_new_request
     }
 
-    pub fn visible_logs(&self, start_idx: usize, viewport_height: usize) -> Vec<&LogEntry> {
+    pub fn get_all_logs_offset(&self, start_idx: usize, viewport_height: usize) -> &[LogEntry] {
         let total_logs = self.all_logs.len();
-        if total_logs == 0 {
-            return Vec::new();
-        }
-
-        if start_idx >= total_logs {
-            return Vec::new();
-        }
-
-        let visible_count = viewport_height.min(total_logs - start_idx);
-        let mut result = Vec::with_capacity(visible_count);
-
-        for i in 0..visible_count {
-            let idx = start_idx + i;
-            result.push(&self.all_logs[idx]);
-        }
-
-        result
+        let start_idx = start_idx.min(total_logs);
+        let end_idx = (start_idx + viewport_height).min(total_logs);
+        &self.all_logs[start_idx..end_idx]
     }
 
     pub fn logs_count(&self) -> usize {

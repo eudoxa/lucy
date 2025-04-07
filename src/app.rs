@@ -231,9 +231,9 @@ impl App {
         log_count.saturating_sub(viewport_height)
     }
 
-    pub fn get_visible_logs(&self, viewport_height: usize) -> Vec<&LogEntry> {
+    pub fn get_visible_all_logs(&self, viewport_height: usize) -> &[LogEntry] {
         let start_idx = self.app_view.get_scroll_offset(Panel::LogStream);
-        self.state.visible_logs(start_idx, viewport_height)
+        self.state.get_all_logs_offset(start_idx, viewport_height)
     }
 
     pub fn add_log_entry(&mut self, log_entry: LogEntry) {
