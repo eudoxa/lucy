@@ -12,6 +12,7 @@ pub struct App {
     pub state: AppState,
     pub app_view: AppView,
     pub copy_mode_enabled: bool,
+    pub simple_mode_enabled: bool,
 }
 
 impl App {
@@ -20,6 +21,7 @@ impl App {
             state: AppState::new(),
             app_view: AppView::new(),
             copy_mode_enabled: false,
+            simple_mode_enabled: false,
         }
     }
 
@@ -87,6 +89,7 @@ impl App {
                             KeyCode::Tab => self.toggle_focus(),
                             KeyCode::Char(' ') => self.jump_to_latest(),
                             KeyCode::Char('m') | KeyCode::Char('M') => self.toggle_copy_mode()?,
+                            KeyCode::Char('s') | KeyCode::Char('S') => self.toggle_simple_mode()?,
                             KeyCode::Char('d')
                                 if key.modifiers.contains(event::KeyModifiers::CONTROL) =>
                             {
@@ -265,6 +268,11 @@ impl App {
 
     pub fn jump_to_latest(&mut self) {
         self.select_request(0);
+    }
+
+    fn toggle_simple_mode(&mut self) -> color_eyre::Result<()> {
+        self.simple_mode_enabled = !self.simple_mode_enabled;
+        Ok(())
     }
 
     fn handle_mouse_event(&mut self, mouse_event: event::MouseEvent, layout_info: &LayoutInfo) {

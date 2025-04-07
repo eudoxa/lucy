@@ -1,6 +1,7 @@
 use crate::app::App;
 use crate::layout::Panel;
 use crate::log_parser::strip_ansi_for_parsing;
+use crate::simple_formatter::{self, format_simple_log_line, parse_ansi_colors};
 use crate::sql_info::QueryType;
 use ansi_to_tui::IntoText;
 use ratatui::{
@@ -121,36 +122,51 @@ pub fn build_detail_component(app: &App) -> Paragraph<'_> {
             };
 
             let viewport_height = app.app_view.viewport_height(Panel::RequestDetail);
-            let total_entries = group.entries.len();
-            let mut visible_logs = Vec::with_capacity(viewport_height.min(total_entries));
-
             let detail_scroll_offset = app.app_view.get_scroll_offset(Panel::RequestDetail);
-            let start_idx = detail_scroll_offset.min(total_entries.saturating_sub(1));
-            let visible_count = viewport_height.min(total_entries.saturating_sub(start_idx));
+
+            let (display_lines, total_display_entries) = if app.simple_mode_enabled {
+                // Filter logs for Simple Mode using format_simple_log_line
+                let simple_lines: Vec<Line<'static>> = group
+                    .entries
+                    .iter()
+                    .filter_map(|log| format_simple_log_line(&log.message))
+                    .collect();
+                let count = simple_lines.len();
+                (simple_lines, count)
+            } else {
+                // Prepare lines for Normal Mode
+                let normal_lines: Vec<Line<'static>> = group
+                    .entries
+                    .iter()
+                    .map(|log| {
+                        let timestamp = log.timestamp.format("%H:%M:%S%.3f").to_string();
+                        let message = if let Some(after_id) =
+                            strip_ansi_for_parsing(&log.message).find(']')
+                        {
+                            let raw_message = &log.message[(after_id + 1)..].trim();
+                            raw_message.to_string()
+                        } else {
+                            log.message.clone()
+                        };
+                        let spans = parse_ansi_colors(&message);
+                        Line::from(spans)
+                    })
+                    .collect();
+                let count = normal_lines.len();
+                (normal_lines, count)
+            };
+
+            let start_idx = detail_scroll_offset.min(total_display_entries.saturating_sub(1));
+            let visible_count =
+                viewport_height.min(total_display_entries.saturating_sub(start_idx));
 
             for i in 0..visible_count {
-                let idx = total_entries - 1 - (start_idx + i);
-                if idx < total_entries {
-                    let log = &group.entries[idx];
-                    visible_logs.push(log);
+                let idx = total_display_entries
+                    .saturating_sub(1)
+                    .saturating_sub(start_idx + i);
+                if idx < display_lines.len() {
+                    text.extend(Text::from(display_lines[idx].clone()));
                 }
-            }
-
-            for log in &visible_logs {
-                let timestamp = log.timestamp.format("%H:%M:%S%.3f").to_string();
-                let message = if let Some(after_id) = strip_ansi_for_parsing(&log.message).find(']')
-                {
-                    let raw_message = &log.message[(after_id + 1)..].trim();
-                    raw_message.to_string()
-                } else {
-                    log.message.clone()
-                };
-                let mut spans = vec![Span::styled(
-                    format!("[{}] ", timestamp),
-                    Style::default().fg(Color::Gray),
-                )];
-                spans.extend(parse_ansi_colors(&message));
-                text.extend(Text::from(Line::from(spans)));
             }
 
             (title_span, text)
@@ -162,14 +178,25 @@ pub fn build_detail_component(app: &App) -> Paragraph<'_> {
         _ => Style::default().fg(Color::DarkGray),
     };
     let paragraph = Paragraph::new(log_text);
+
     let scroll_info = if let Some(group) = app.state.selected_group() {
-        let total_entries = group.entries.len();
+        let total_entries = if app.simple_mode_enabled {
+            // Count only the lines that match the simple format
+            group
+                .entries
+                .iter()
+                .filter(|log| format_simple_log_line(&log.message).is_some())
+                .count()
+        } else {
+            group.entries.len()
+        };
+
         if total_entries == 0 {
             "0/0".to_string()
         } else {
             let detail_scroll_offset = app.app_view.get_scroll_offset(Panel::RequestDetail);
-            let start_idx = detail_scroll_offset + INDEX_OFFSET;
-            format!("{}- /{}", start_idx, total_entries)
+            let start_idx = (detail_scroll_offset + INDEX_OFFSET).min(total_entries);
+            format!("{}-*/{}", start_idx.max(1), total_entries)
         }
     } else {
         "0/0".to_string()
@@ -187,7 +214,11 @@ pub fn build_detail_component(app: &App) -> Paragraph<'_> {
         .borders(Borders::ALL)
         .border_style(border_style);
 
-    paragraph.block(block).wrap(Wrap { trim: true })
+    if app.simple_mode_enabled {
+        paragraph.block(block)
+    } else {
+        paragraph.block(block).wrap(Wrap { trim: true })
+    }
 }
 
 pub fn build_log_stream_component(app: &App) -> Paragraph<'_> {
@@ -214,8 +245,10 @@ pub fn build_log_stream_component(app: &App) -> Paragraph<'_> {
 
     let copy_mode_text = if app.copy_mode_enabled {
         " COPY MODE (press 'm' to exit) "
+    } else if app.simple_mode_enabled {
+        " SIMPLE MODE (press 's' to exit) | j/k: scroll | Tab/Shift+Tab: panels | Ctrl+c: quit | m: copy mode "
     } else {
-        " j/k: scroll | Ctrl+d/u: page | Tab/Shift+Tab: panels | Ctrl+c: quit | m: copy mode "
+        " j/k: scroll | Ctrl+d/u: page | Tab/Shift+Tab: panels | Ctrl+c: quit | m: copy | s: simple mode "
     };
 
     let scroll_info = if total_logs == 0 {
@@ -326,37 +359,4 @@ pub fn build_sql_component(app: &App) -> Paragraph<'_> {
         .block(block)
         .wrap(Wrap { trim: true })
         .scroll((sql_scroll_offset as u16, 0))
-}
-
-fn parse_ansi_colors(text: &str) -> Vec<Span<'static>> {
-    match text.into_text() {
-        Ok(parsed_text) => {
-            if !parsed_text.lines.is_empty() {
-                parsed_text.lines[0].spans.clone()
-            } else {
-                vec![Span::raw(text.to_string())]
-            }
-        }
-        Err(_) => {
-            vec![Span::raw(text.to_string())]
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_parse_ansi_colors() {
-        let plain_text = "Hello, world!";
-        let spans = parse_ansi_colors(plain_text);
-        assert_eq!(spans.len(), 1);
-        assert_eq!(spans[0].content, "Hello, world!");
-
-        let colored_text = "\x1b[31mRed text\x1b[0m";
-        let spans = parse_ansi_colors(colored_text);
-        assert!(!spans.is_empty());
-        assert!(spans.iter().any(|span| span.content.contains("Red text")));
-    }
 }

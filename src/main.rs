@@ -6,6 +6,7 @@ mod layout;
 mod log_parser;
 mod panel_components;
 mod setup;
+mod simple_formatter;
 mod sql_info;
 
 use color_eyre::Result;
