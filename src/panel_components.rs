@@ -75,7 +75,7 @@ pub fn build_list_component(app: &App) -> List<'_> {
         format!("{}-{}/{}", start_idx, end_idx, total_requests)
     };
 
-    let title_text = format!(" Requests [{}] ", scroll_info);
+    let title_text = format!("[{}]", scroll_info);
     let title_style = match app.app_view.focused_panel {
         Panel::RequestList => Style::default().fg(Color::Yellow),
         _ => Style::default().fg(Color::White),
@@ -92,41 +92,33 @@ pub fn build_list_component(app: &App) -> List<'_> {
 }
 
 pub fn build_detail_component(app: &App) -> Paragraph<'_> {
-    let (_title_span, log_text) = match app.state.selected_group() {
+    let (title_span, log_text) = match app.state.selected_group() {
         None => (Span::raw("Logs"), Text::from("Waiting for logs...")),
         Some(group) => {
-            let title_span = if group.finished {
-                Span::styled(
-                    "Completed",
-                    Style::default()
-                        .fg(Color::Green)
-                        .add_modifier(Modifier::BOLD),
-                )
-            } else {
-                Span::styled(
-                    "Running",
-                    Style::default()
-                        .fg(Color::Yellow)
-                        .add_modifier(Modifier::BOLD),
-                )
-            };
-
             let mut text = Text::default();
-            if let Some(entry) = group.entries.iter().find(|entry| {
+            let title_span = if let Some(entry) = group.entries.iter().find(|entry| {
                 let msg = &entry.message;
                 msg.contains("Started GET")
                     || msg.contains("Started POST")
                     || msg.contains("Started PUT")
                     || msg.contains("Started DELETE")
             }) {
-                let styled_line = parse_ansi_colors(&entry.message);
-                let mut spans = styled_line;
-                for span in &mut spans {
-                    span.style = span.style.add_modifier(Modifier::BOLD);
-                }
-                text.extend(Text::from(Line::from(spans)));
-                text.extend(Text::from(Line::from("")));
-            }
+                let msg = strip_ansi_for_parsing(&entry.message);
+                let url = if let Some(url_start) = msg.find(" \"") {
+                    if let Some(url_end) = msg[url_start + 2..].find("\"") {
+                        &msg[url_start + 2..url_start + 2 + url_end]
+                    } else {
+                        ""
+                    }
+                } else {
+                    ""
+                };
+                let view_width = app.app_view.viewport_width(Panel::RequestDetail);
+                let text = url.chars().take(view_width - 10).collect::<String>();
+                Span::raw(text)
+            } else {
+                Span::raw("".to_string())
+            };
 
             let viewport_height = app.app_view.viewport_height(Panel::RequestDetail);
             let total_entries = group.entries.len();
@@ -170,7 +162,6 @@ pub fn build_detail_component(app: &App) -> Paragraph<'_> {
         _ => Style::default().fg(Color::DarkGray),
     };
     let paragraph = Paragraph::new(log_text);
-
     let scroll_info = if let Some(group) = app.state.selected_group() {
         let total_entries = group.entries.len();
         if total_entries == 0 {
@@ -178,26 +169,20 @@ pub fn build_detail_component(app: &App) -> Paragraph<'_> {
         } else {
             let detail_scroll_offset = app.app_view.get_scroll_offset(Panel::RequestDetail);
             let start_idx = detail_scroll_offset + INDEX_OFFSET;
-            let viewport_height = app.app_view.viewport_height(Panel::RequestDetail);
-            let need_height =
-                paragraph.line_count(app.app_view.get_viewport_width(Panel::RequestDetail) as u16);
-            let overflow_lines = need_height.saturating_sub(viewport_height);
-            let end_idx =
-                (start_idx + viewport_height - UI_OVERHEAD - overflow_lines).min(total_entries);
-            format!("{}-{}/{}", start_idx, end_idx, total_entries)
+            format!("{}- /{}", start_idx, total_entries)
         }
     } else {
         "0/0".to_string()
     };
 
-    let title_text = format!(" [{}] ", scroll_info);
+    let title_text = format!("[{}] {} ", scroll_info, title_span);
     let title_style = match app.app_view.focused_panel {
         Panel::RequestDetail => Style::default().fg(Color::Yellow),
         _ => Style::default().fg(Color::White),
     };
     let block = Block::default()
         .padding(Padding::new(1, 1, 1, 1))
-        .title_alignment(ratatui::layout::Alignment::Right)
+        .title_alignment(ratatui::layout::Alignment::Left)
         .title(Span::styled(title_text, title_style))
         .borders(Borders::ALL)
         .border_style(border_style);
@@ -230,7 +215,7 @@ pub fn build_log_stream_component(app: &App) -> Paragraph<'_> {
     let copy_mode_text = if app.copy_mode_enabled {
         " COPY MODE (press 'm' to exit) "
     } else {
-        " j/k: scroll | Ctrl+d/u: page | Tab/Shift+Tab: panels | Ctrl+c: quit | m: copy mode | f: toggle adaptive FPS "
+        " j/k: scroll | Ctrl+d/u: page | Tab/Shift+Tab: panels | Ctrl+c: quit | m: copy mode "
     };
 
     let scroll_info = if total_logs == 0 {
@@ -251,7 +236,7 @@ pub fn build_log_stream_component(app: &App) -> Paragraph<'_> {
         _ => Style::default().fg(Color::DarkGray),
     };
 
-    let title_text = format!(" All Logs Stream [{}] ", scroll_info);
+    let title_text = format!("[{}] ", scroll_info);
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(border_style)
@@ -328,7 +313,7 @@ pub fn build_sql_component(app: &App) -> Paragraph<'_> {
         "0/0".to_string()
     };
 
-    let title_text = format!(" SQL [{}] ", scroll_info);
+    let title_text = format!("[{}] ", scroll_info);
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(border_style)

@@ -50,16 +50,10 @@ impl AppView {
 
     pub fn viewport_height(&self, panel: Panel) -> usize {
         let region = self.layout_info.region(panel);
-
-        match panel {
-            Panel::RequestDetail => region.height.saturating_sub(Self::VIEW_PADDING) as usize,
-            Panel::LogStream => region.height.saturating_sub(Self::VIEW_PADDING) as usize,
-            Panel::SqlInfo => region.height.saturating_sub(Self::VIEW_PADDING) as usize,
-            Panel::RequestList => region.height.saturating_sub(Self::VIEW_PADDING) as usize,
-        }
+        region.height.saturating_sub(Self::VIEW_PADDING) as usize
     }
 
-    pub fn get_viewport_width(&self, panel: Panel) -> usize {
+    pub fn viewport_width(&self, panel: Panel) -> usize {
         let region = self.layout_info.region(panel);
         region.width.saturating_sub(Self::VIEW_PADDING) as usize
     }
