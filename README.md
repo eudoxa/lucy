@@ -2,6 +2,8 @@
 
 Lucy helps you visualize Rails logs by grouping related entries by their request ID.
 
+![Lucy Demo](./docs/lucy-demo.gif)
+
 ## Installation
 
 ```bash
