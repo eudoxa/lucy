@@ -103,6 +103,14 @@ pub fn build_detail_component(app: &App) -> Paragraph<'_> {
                     || msg.contains("Started DELETE")
             }) {
                 let msg = strip_ansi_for_parsing(&entry.message);
+
+                // Extract HTTP method directly
+                let method = msg
+                    .split_whitespace()
+                    .skip_while(|&s| s != "Started")
+                    .nth(1)
+                    .unwrap_or("");
+
                 let url = if let Some(url_start) = msg.find(" \"") {
                     if let Some(url_end) = msg[url_start + 2..].find("\"") {
                         &msg[url_start + 2..url_start + 2 + url_end]
@@ -113,7 +121,11 @@ pub fn build_detail_component(app: &App) -> Paragraph<'_> {
                     ""
                 };
                 let view_width = app.app_view.viewport_width(Panel::RequestDetail);
-                let text = url.chars().take(view_width - 10).collect::<String>();
+                // Include the method in the displayed text
+                let text = format!("{} {}", method, url)
+                    .chars()
+                    .take(view_width - 10)
+                    .collect::<String>();
                 Span::raw(text)
             } else {
                 Span::raw("".to_string())
