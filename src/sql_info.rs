@@ -98,10 +98,7 @@ pub fn parse_sql_from_logs(logs: &[&str]) -> SqlQueryInfo {
         };
 
         if let Some(query_type) = query_type {
-            if let Some(count) = sql_info.query_counts.get_mut(&query_type) {
-                *count += 1;
-            }
-
+            *sql_info.query_counts.entry(query_type).or_insert(0) += 1;
             for cap in table_pattern.captures_iter(msg) {
                 let table_name = cap.get(1).or_else(|| cap.get(2)).map(|m| m.as_str());
 
