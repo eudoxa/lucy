@@ -26,7 +26,7 @@ end
 Monitor your logs with this command:
 
 ```bash
-tail -f -n 1000 logs/development.log | lucy
+tail -f -n 1000 log/development.log | lucy
 ```
 
 ## Development
@@ -40,5 +40,5 @@ LUCY_DEV=1 cargo run
 Or when using the installed binary:
 
 ```bash
-tail -f -n 1000 logs/development.log | LUCY_DEV=1 lucy
+tail -f -n 1000 log/development.log | LUCY_DEV=1 lucy
 ```
