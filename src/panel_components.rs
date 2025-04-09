@@ -1,9 +1,8 @@
 use crate::app::App;
 use crate::layout::Panel;
 use crate::log_parser::strip_ansi_for_parsing;
-use crate::simple_formatter::{self, format_simple_log_line, parse_ansi_colors};
+use crate::simple_formatter::{format_simple_log_line, parse_ansi_colors};
 use crate::sql_info::QueryType;
-use ansi_to_tui::IntoText;
 use ratatui::{
     style::{Color, Modifier, Style},
     text::{Line, Span, Text},
@@ -11,7 +10,6 @@ use ratatui::{
 };
 
 const INDEX_OFFSET: usize = 1;
-const UI_OVERHEAD: usize = 4;
 
 pub fn build_list_component(app: &App) -> List<'_> {
     let mut items = Vec::with_capacity(app.state.log_group_count());
@@ -139,7 +137,6 @@ pub fn build_detail_component(app: &App) -> Paragraph<'_> {
                     .entries
                     .iter()
                     .map(|log| {
-                        let timestamp = log.timestamp.format("%H:%M:%S%.3f").to_string();
                         let message = if let Some(after_id) =
                             strip_ansi_for_parsing(&log.message).find(']')
                         {
@@ -230,7 +227,7 @@ pub fn build_log_stream_component(app: &App) -> Paragraph<'_> {
     if total_logs > 0 {
         let visible_logs = app.get_visible_all_logs(viewport_height);
 
-        for log in visible_logs.into_iter() {
+        for log in visible_logs.iter() {
             let timestamp = log.timestamp.format("%H:%M:%S%.3f").to_string();
 
             let mut spans = vec![Span::styled(

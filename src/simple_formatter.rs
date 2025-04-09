@@ -30,7 +30,7 @@ pub fn format_simple_log_line(line: &str) -> Option<Line<'static>> {
     } else if RE_PARAMETERS.is_match(core_message) {
         Some(Line::from(parse_ansi_colors(core_message)))
     } else if RE_SQL.is_match(core_message) && !core_message.contains("CACHE") {
-        Some(Line::from(parse_ansi_colors(&core_message)))
+        Some(Line::from(parse_ansi_colors(core_message)))
     } else if RE_COMPLETED.is_match(core_message) {
         Some(Line::from(parse_ansi_colors(core_message)))
     } else {
