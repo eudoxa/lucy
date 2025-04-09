@@ -1,6 +1,6 @@
-# Lucy - Rails Log Viewer with Request ID Grouping
+# Lucy - Rails log viewer with request_id grouping
 
-Lucy helps you visualize Rails logs by grouping related entries by their request ID.
+Lucy helps you visualize Rails logs by grouping related entries by their request_id.
 
 ![Lucy Demo](./docs/lucy-demo.gif)
 
@@ -32,15 +32,8 @@ tail -f -n 1000 log/development.log | lucy
 ```
 
 ## Development
-
-To enable debug logs during development, set the `LUCY_DEV` environment variable:
-
-```bash
-LUCY_DEV=1 cargo run
-```
-
-Or when using the installed binary:
+To enable debug logs during development, set the `LUCY_DEV` environment variable. This will write debug information to `tracing.log`:
 
 ```bash
-tail -f -n 1000 log/development.log | LUCY_DEV=1 lucy
+tail -f -n 1000 your_log_path/development.log | LUCY_DEV=1 cargo run
 ```
