@@ -4,9 +4,6 @@ use ratatui::style::Color;
 use regex::Regex;
 use std::collections::{HashMap, VecDeque};
 
-static RE_COMPLETED: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"Completed (?P<status>\d+) (?P<status_text>[\w\s]+)").unwrap());
-
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum StatusType {
     Success, // 2xx
@@ -70,7 +67,6 @@ impl LogGroup {
 
         if message.contains("Completed ") {
             self.finished = true;
-            // Extract status code and set status_type
             if let Some(status_str) = message
                 .split_whitespace()
                 .skip_while(|&s| s != "Completed")

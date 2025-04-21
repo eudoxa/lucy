@@ -52,9 +52,9 @@ pub fn build_list_component(app: &App) -> List<'_> {
             Span::raw(format!("{} ", time_str)),
             Span::styled(
                 format!("{:2}-{:2} ", log_count, sql_count),
-                Style::default().fg(Color::Cyan),
+                THEME.default.style().fg(Color::Cyan),
             ),
-            Span::styled(title, Style::default().fg(status_color)),
+            Span::styled(title, status_color),
         ]);
 
         let style = if index == app.state.selected_index {
@@ -62,7 +62,7 @@ pub fn build_list_component(app: &App) -> List<'_> {
                 .style_with_modifier(Modifier::BOLD | Modifier::UNDERLINED)
                 .underline_color(THEME.underline)
         } else if finished {
-            Style::default().fg(status_color)
+            THEME.default.style().fg(status_color)
         } else {
             THEME.default.style()
         };
@@ -71,7 +71,7 @@ pub fn build_list_component(app: &App) -> List<'_> {
     }
 
     let border_style = match app.app_view.focused_panel {
-        Panel::RequestList => THEME.border,
+        Panel::RequestList => THEME.active_border,
         _ => THEME.border,
     };
 
@@ -193,8 +193,8 @@ pub fn build_detail_component(app: &App) -> Paragraph<'_> {
     };
 
     let border_style = match app.app_view.focused_panel {
-        Panel::RequestDetail => Style::default().fg(Color::White),
-        _ => Style::default().fg(Color::DarkGray),
+        Panel::RequestDetail => THEME.active_border,
+        _ => THEME.border,
     };
     let paragraph = Paragraph::new(log_text);
 
@@ -229,11 +229,17 @@ pub fn build_detail_component(app: &App) -> Paragraph<'_> {
     };
 
     let title_style = status.to_color().style_with_modifier(Modifier::BOLD);
-
     let block = Block::default()
         .padding(Padding::new(1, 1, 1, 1))
         .title_alignment(ratatui::layout::Alignment::Left)
         .title(Span::styled(title_text, title_style))
+        .title_bottom(
+            Line::from(vec![Span::styled(
+                help_text(&app),
+                Style::default().fg(Color::DarkGray),
+            )])
+            .alignment(ratatui::layout::Alignment::Right),
+        )
         .borders(Borders::ALL)
         .border_style(border_style);
 
@@ -244,10 +250,20 @@ pub fn build_detail_component(app: &App) -> Paragraph<'_> {
     }
 }
 
+fn help_text(app: &App) -> &str {
+    if app.copy_mode_enabled {
+        " COPY MODE (press 'm' to exit) "
+    } else if app.simple_mode_enabled {
+        " SIMPLE MODE (press 's' to exit) | j/k | Tab/Shift+Tab | Ctrl+c | m: copy "
+    } else {
+        " j/k | Ctrl+d/u | Tab/Shift+Tab | Ctrl+c | m: copy | s: simple"
+    }
+}
+
 pub fn build_sql_component(app: &App) -> Paragraph<'_> {
     let border_style = match app.app_view.focused_panel {
-        Panel::SqlInfo => Style::default().fg(Color::White),
-        _ => Style::default().fg(Color::DarkGray),
+        Panel::SqlInfo => THEME.active_border,
+        _ => THEME.border,
     };
 
     let mut text = Text::default();

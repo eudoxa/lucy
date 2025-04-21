@@ -44,6 +44,7 @@ pub struct Theme {
     pub error: Color,
     pub default: Color,
     pub border: Color,
+    pub active_border: Color,
     pub underline: Color,
 }
 
@@ -52,7 +53,8 @@ pub const THEME: Theme = Theme {
     warning: Color::Magenta,
     error: Color::Red,
     default: Color::White,
-    border: Color::Gray,
+    border: Color::DarkGray,
+    active_border: Color::White,
     underline: Color::White,
 };
 
