@@ -27,7 +27,7 @@ pub fn format_simple_log_line(line: &str) -> Option<Line<'static>> {
         line
     };
 
-    if let Some(captures) = RE_COMPLETED.captures(core_message) {
+    let result = if let Some(captures) = RE_COMPLETED.captures(core_message) {
         let status = captures.name("status").unwrap().as_str();
         let colored_message = match status.chars().next().unwrap() {
             '2' => format!("{}{}{}", THEME.success.ansi(), core_message, ANSI_RESET), // green
@@ -39,13 +39,15 @@ pub fn format_simple_log_line(line: &str) -> Option<Line<'static>> {
     } else if RE_STARTED.is_match(core_message)
         || RE_PROCESSING.is_match(core_message)
         || RE_PARAMETERS.is_match(core_message)
-        || (RE_SQL.is_match(core_message) && !core_message.contains("CACHE"))
+        || RE_SQL.is_match(core_message)
         || RE_CONTINUATION.is_match(core_message)
     {
         Some(Line::from(parse_ansi_colors(core_message)))
     } else {
         None
-    }
+    };
+
+    result
 }
 
 pub fn parse_ansi_colors(text: &str) -> Vec<Span<'static>> {
