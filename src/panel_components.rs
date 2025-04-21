@@ -235,7 +235,7 @@ pub fn build_detail_component(app: &App) -> Paragraph<'_> {
         .title(Span::styled(title_text, title_style))
         .title_bottom(
             Line::from(vec![Span::styled(
-                help_text(&app),
+                help_text(app),
                 Style::default().fg(Color::DarkGray),
             )])
             .alignment(ratatui::layout::Alignment::Right),

@@ -1,7 +1,5 @@
 use crate::{sql_info::SqlQueryInfo, theme::THEME};
-use once_cell::sync::Lazy;
 use ratatui::style::Color;
-use regex::Regex;
 use std::collections::{HashMap, VecDeque};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
