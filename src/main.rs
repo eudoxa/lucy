@@ -8,6 +8,7 @@ mod panel_components;
 mod setup;
 mod simple_formatter;
 mod sql_info;
+mod theme;
 
 use color_eyre::Result;
 

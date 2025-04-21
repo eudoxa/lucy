@@ -1,8 +1,10 @@
 use crate::app::App;
+use crate::app_state::StatusType;
 use crate::layout::Panel;
 use crate::log_parser::strip_ansi_for_parsing;
 use crate::simple_formatter::{format_simple_log_line, parse_ansi_colors};
 use crate::sql_info::QueryType;
+use crate::theme::{ColorExt, THEME};
 use ratatui::{
     style::{Color, Modifier, Style},
     text::{Line, Span, Text},
@@ -35,34 +37,42 @@ pub fn build_list_component(app: &App) -> List<'_> {
         let log_count = group.entries.len();
         let sql_count = group.sql_query_info.total_queries();
 
+        let status_color = if finished {
+            match group.status_type {
+                StatusType::Success => THEME.success,
+                StatusType::Warning => THEME.warning,
+                StatusType::Error => THEME.error,
+                StatusType::Unknown => THEME.default,
+            }
+        } else {
+            THEME.default
+        };
+
         let content = Line::from(vec![
             Span::raw(format!("{} ", time_str)),
             Span::styled(
                 format!("{:2}-{:2} ", log_count, sql_count),
                 Style::default().fg(Color::Cyan),
             ),
-            Span::styled(
-                title,
-                Style::default().fg(if finished { Color::Green } else { Color::White }),
-            ),
+            Span::styled(title, Style::default().fg(status_color)),
         ]);
 
         let style = if index == app.state.selected_index {
-            Style::default()
-                .fg(Color::Yellow)
-                .add_modifier(Modifier::BOLD)
+            status_color
+                .style_with_modifier(Modifier::BOLD | Modifier::UNDERLINED)
+                .underline_color(THEME.underline)
         } else if finished {
-            Style::default().fg(Color::Green)
+            Style::default().fg(status_color)
         } else {
-            Style::default().fg(Color::White)
+            THEME.default.style()
         };
 
         items.push(ListItem::new(content).style(style));
     }
 
     let border_style = match app.app_view.focused_panel {
-        Panel::RequestList => Style::default().fg(Color::White),
-        _ => Style::default().fg(Color::DarkGray),
+        Panel::RequestList => THEME.border,
+        _ => THEME.border,
     };
 
     let total_requests = app.state.log_group_count();
@@ -76,8 +86,8 @@ pub fn build_list_component(app: &App) -> List<'_> {
 
     let title_text = format!("[{}]", scroll_info);
     let title_style = match app.app_view.focused_panel {
-        Panel::RequestList => Style::default().fg(Color::Yellow),
-        _ => Style::default().fg(Color::White),
+        Panel::RequestList => THEME.default.style_with_modifier(Modifier::BOLD),
+        _ => THEME.default.style(),
     };
 
     List::new(items).block(
@@ -212,10 +222,14 @@ pub fn build_detail_component(app: &App) -> Paragraph<'_> {
     };
 
     let title_text = format!("[{}] {} ", scroll_info, title_span);
-    let title_style = match app.app_view.focused_panel {
-        Panel::RequestDetail => Style::default().fg(Color::Yellow),
-        _ => Style::default().fg(Color::White),
+    let status = if let Some(group) = app.state.selected_group() {
+        group.status_type
+    } else {
+        StatusType::Unknown
     };
+
+    let title_style = status.to_color().style_with_modifier(Modifier::BOLD);
+
     let block = Block::default()
         .padding(Padding::new(1, 1, 1, 1))
         .title_alignment(ratatui::layout::Alignment::Left)

@@ -1,5 +1,30 @@
-use crate::sql_info::SqlQueryInfo;
+use crate::{sql_info::SqlQueryInfo, theme::THEME};
+use once_cell::sync::Lazy;
+use ratatui::style::Color;
+use regex::Regex;
 use std::collections::{HashMap, VecDeque};
+
+static RE_COMPLETED: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"Completed (?P<status>\d+) (?P<status_text>[\w\s]+)").unwrap());
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum StatusType {
+    Success, // 2xx
+    Warning, // 4xx
+    Error,   // 5xx
+    Unknown,
+}
+
+impl StatusType {
+    pub fn to_color(&self) -> Color {
+        match self {
+            StatusType::Success => THEME.success,
+            StatusType::Warning => THEME.warning,
+            StatusType::Error => THEME.error,
+            StatusType::Unknown => THEME.default,
+        }
+    }
+}
 
 pub struct AppState {
     pub logs_by_request_id: HashMap<String, LogGroup>,
@@ -12,6 +37,7 @@ pub struct LogGroup {
     pub title: String,
     pub entries: VecDeque<LogEntry>,
     pub finished: bool,
+    pub status_type: StatusType,
     pub sql_query_info: SqlQueryInfo,
     pub first_timestamp: chrono::DateTime<chrono::Local>,
 }
@@ -22,6 +48,7 @@ impl LogGroup {
             title: "...".to_string(),
             entries: VecDeque::with_capacity(10),
             finished: false,
+            status_type: StatusType::Unknown,
             sql_query_info: SqlQueryInfo::new(),
             first_timestamp: log_entry.timestamp,
         };
@@ -43,6 +70,21 @@ impl LogGroup {
 
         if message.contains("Completed ") {
             self.finished = true;
+            // Extract status code and set status_type
+            if let Some(status_str) = message
+                .split_whitespace()
+                .skip_while(|&s| s != "Completed")
+                .nth(1)
+            {
+                if let Ok(status_code) = status_str.parse::<u16>() {
+                    self.status_type = match status_code {
+                        200..=299 => StatusType::Success,
+                        400..=499 => StatusType::Warning,
+                        500..=599 => StatusType::Error,
+                        _ => StatusType::Unknown,
+                    };
+                }
+            }
         }
 
         if let Some(new_sql_info) = SqlQueryInfo::from_message(message) {
