@@ -19,7 +19,6 @@ impl AppView {
         let mut scroll_offsets = std::collections::HashMap::new();
         scroll_offsets.insert(Panel::RequestList, 0);
         scroll_offsets.insert(Panel::RequestDetail, 0);
-        scroll_offsets.insert(Panel::LogStream, 0);
         scroll_offsets.insert(Panel::SqlInfo, 0);
 
         Self {
@@ -91,7 +90,6 @@ mod tests {
         assert_eq!(view.focused_panel, Panel::RequestList);
         assert_eq!(view.get_scroll_offset(Panel::RequestList), 0);
         assert_eq!(view.get_scroll_offset(Panel::RequestDetail), 0);
-        assert_eq!(view.get_scroll_offset(Panel::LogStream), 0);
         assert_eq!(view.get_scroll_offset(Panel::SqlInfo), 0);
     }
 
@@ -104,31 +102,6 @@ mod tests {
 
         view.set_scroll_offset(Panel::RequestDetail, 10);
         assert_eq!(view.get_scroll_offset(Panel::RequestDetail), 10);
-    }
-
-    #[test]
-    fn test_apply_scroll() {
-        let mut view = AppView::new();
-
-        // Scroll down
-        view.apply_scroll(Panel::LogStream, ScrollDirection::Down(3), 10);
-        assert_eq!(view.get_scroll_offset(Panel::LogStream), 3);
-
-        // Scroll down more
-        view.apply_scroll(Panel::LogStream, ScrollDirection::Down(5), 10);
-        assert_eq!(view.get_scroll_offset(Panel::LogStream), 8);
-
-        // Cannot exceed maximum
-        view.apply_scroll(Panel::LogStream, ScrollDirection::Down(5), 10);
-        assert_eq!(view.get_scroll_offset(Panel::LogStream), 10);
-
-        // Scroll up
-        view.apply_scroll(Panel::LogStream, ScrollDirection::Up(4), 10);
-        assert_eq!(view.get_scroll_offset(Panel::LogStream), 6);
-
-        // Cannot go below zero
-        view.apply_scroll(Panel::LogStream, ScrollDirection::Up(10), 10);
-        assert_eq!(view.get_scroll_offset(Panel::LogStream), 0);
     }
 
     #[test]

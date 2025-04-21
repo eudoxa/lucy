@@ -30,7 +30,6 @@ impl App {
 
         let request_list_region = self.app_view.layout_info.region(Panel::RequestList);
         let request_detail_region = self.app_view.layout_info.region(Panel::RequestDetail);
-        let log_stream_region = self.app_view.layout_info.region(Panel::LogStream);
         let sql_info_region = self.app_view.layout_info.region(Panel::SqlInfo);
 
         let request_list = panel_components::build_list_component(self);
@@ -38,9 +37,6 @@ impl App {
 
         let detail_panel = panel_components::build_detail_component(self);
         f.render_widget(detail_panel, request_detail_region);
-
-        let log_stream = panel_components::build_log_stream_component(self);
-        f.render_widget(log_stream, log_stream_region);
 
         let sql_panel = panel_components::build_sql_component(self);
         f.render_widget(sql_panel, sql_info_region);
@@ -101,8 +97,6 @@ impl App {
                                         Panel::RequestDetail,
                                         SCROLL_PAGE_SIZE as i8,
                                     ),
-                                    Panel::LogStream => self
-                                        .apply_scroll_to(Panel::LogStream, SCROLL_PAGE_SIZE as i8),
                                     Panel::SqlInfo => {
                                         self.apply_scroll_to(Panel::SqlInfo, SCROLL_PAGE_SIZE as i8)
                                     }
@@ -119,10 +113,6 @@ impl App {
                                         Panel::RequestDetail,
                                         -(SCROLL_PAGE_SIZE as i8),
                                     ),
-                                    Panel::LogStream => self.apply_scroll_to(
-                                        Panel::LogStream,
-                                        -(SCROLL_PAGE_SIZE as i8),
-                                    ),
                                     Panel::SqlInfo => self
                                         .apply_scroll_to(Panel::SqlInfo, -(SCROLL_PAGE_SIZE as i8)),
                                 }
@@ -137,27 +127,25 @@ impl App {
                                     }
                                     _ => {}
                                 },
-                                Panel::RequestDetail | Panel::LogStream | Panel::SqlInfo => {
-                                    match key.code {
-                                        KeyCode::Char('j') | KeyCode::Down => self.apply_scroll_to(
-                                            self.app_view.focused_panel,
-                                            SCROLL_UNIT as i8,
-                                        ),
-                                        KeyCode::Char('k') | KeyCode::Up => self.apply_scroll_to(
-                                            self.app_view.focused_panel,
-                                            -(SCROLL_UNIT as i8),
-                                        ),
-                                        KeyCode::PageDown => self.apply_scroll_to(
-                                            self.app_view.focused_panel,
-                                            SCROLL_PAGE_SIZE as i8,
-                                        ),
-                                        KeyCode::PageUp => self.apply_scroll_to(
-                                            self.app_view.focused_panel,
-                                            -(SCROLL_PAGE_SIZE as i8),
-                                        ),
-                                        _ => {}
-                                    }
-                                }
+                                _ => match key.code {
+                                    KeyCode::Char('j') | KeyCode::Down => self.apply_scroll_to(
+                                        self.app_view.focused_panel,
+                                        SCROLL_UNIT as i8,
+                                    ),
+                                    KeyCode::Char('k') | KeyCode::Up => self.apply_scroll_to(
+                                        self.app_view.focused_panel,
+                                        -(SCROLL_UNIT as i8),
+                                    ),
+                                    KeyCode::PageDown => self.apply_scroll_to(
+                                        self.app_view.focused_panel,
+                                        SCROLL_PAGE_SIZE as i8,
+                                    ),
+                                    KeyCode::PageUp => self.apply_scroll_to(
+                                        self.app_view.focused_panel,
+                                        -(SCROLL_PAGE_SIZE as i8),
+                                    ),
+                                    _ => {}
+                                },
                             },
                         },
                         Event::Mouse(mouse_event) if !self.copy_mode_enabled => {
@@ -203,7 +191,6 @@ impl App {
     fn apply_scroll_to(&mut self, panel: Panel, amount: i8) {
         let max_scroll = match panel {
             Panel::RequestDetail => self.get_max_detail_scroll(),
-            Panel::LogStream => self.get_max_stream_scroll(),
             Panel::SqlInfo => self.get_max_sql_scroll(),
             _ => 0,
         };
@@ -228,31 +215,18 @@ impl App {
             .max(0)
     }
 
-    fn get_max_stream_scroll(&self) -> usize {
-        let log_count = self.state.logs_count();
-        let viewport_height = self.app_view.viewport_height(Panel::LogStream);
-        log_count.saturating_sub(viewport_height)
-    }
-
-    pub fn get_visible_all_logs(&self, viewport_height: usize) -> &[LogEntry] {
-        let start_idx = self.app_view.get_scroll_offset(Panel::LogStream);
-        self.state.get_all_logs_offset(start_idx, viewport_height)
-    }
-
     pub fn add_log_entry(&mut self, log_entry: LogEntry) {
         let is_new_request = self.state.add_log_entry(log_entry);
         if is_new_request {
             self.app_view
                 .adjust_scroll_for_index(Panel::RequestList, self.state.selected_index);
         }
-        self.auto_scroll_if_needed();
     }
 
     pub fn toggle_focus(&mut self) {
         self.app_view.focused_panel = match self.app_view.focused_panel {
             Panel::RequestList => Panel::RequestDetail,
-            Panel::RequestDetail => Panel::LogStream,
-            Panel::LogStream => Panel::SqlInfo,
+            Panel::RequestDetail => Panel::SqlInfo,
             Panel::SqlInfo => Panel::RequestList,
         };
     }
@@ -261,8 +235,7 @@ impl App {
         self.app_view.focused_panel = match self.app_view.focused_panel {
             Panel::RequestList => Panel::SqlInfo,
             Panel::RequestDetail => Panel::RequestList,
-            Panel::LogStream => Panel::RequestDetail,
-            Panel::SqlInfo => Panel::LogStream,
+            Panel::SqlInfo => Panel::RequestDetail,
         };
     }
 
@@ -333,17 +306,5 @@ impl App {
         }
 
         Ok(())
-    }
-
-    fn auto_scroll_if_needed(&mut self) {
-        let is_all_logs_focused = matches!(self.app_view.focused_panel, Panel::LogStream);
-        let max_stream_scroll = self.get_max_stream_scroll();
-        let all_logs_offset = self.app_view.get_scroll_offset(Panel::LogStream);
-        let at_bottom = all_logs_offset >= max_stream_scroll.saturating_sub(1);
-
-        if is_all_logs_focused || at_bottom {
-            self.app_view
-                .set_scroll_offset(Panel::LogStream, self.get_max_stream_scroll());
-        }
     }
 }

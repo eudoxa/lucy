@@ -150,17 +150,6 @@ impl AppState {
 
         is_new_request
     }
-
-    pub fn get_all_logs_offset(&self, start_idx: usize, viewport_height: usize) -> &[LogEntry] {
-        let total_logs = self.all_logs.len();
-        let start_idx = start_idx.min(total_logs);
-        let end_idx = (start_idx + viewport_height).min(total_logs);
-        &self.all_logs[start_idx..end_idx]
-    }
-
-    pub fn logs_count(&self) -> usize {
-        self.all_logs.len()
-    }
 }
 
 #[cfg(test)]
