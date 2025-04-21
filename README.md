@@ -37,3 +37,4 @@ To enable debug logs during development, set the `LUCY_DEV` environment variable
 ```bash
 tail -f -n 1000 your_log_path/development.log | LUCY_DEV=1 cargo run
 ```
+
