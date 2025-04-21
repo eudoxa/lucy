@@ -15,6 +15,7 @@ static RE_SQL: Lazy<Regex> =
     Lazy::new(|| Regex::new(r#"(SELECT|INSERT|UPDATE|DELETE).*"#).unwrap());
 static RE_COMPLETED: Lazy<Regex> =
     Lazy::new(|| Regex::new(r#"Completed (?P<status>[0-9]+) \w+ in (?P<time>[0-9]+)ms"#).unwrap());
+static RE_CONTINUATION: Lazy<Regex> = Lazy::new(|| Regex::new(r#"↳"#).unwrap());
 
 pub fn format_simple_log_line(line: &str) -> Option<Line<'static>> {
     let core_message = if let Some(index) = line.rfind("] ") {
@@ -28,6 +29,7 @@ pub fn format_simple_log_line(line: &str) -> Option<Line<'static>> {
         || RE_PARAMETERS.is_match(core_message)
         || (RE_SQL.is_match(core_message) && !core_message.contains("CACHE"))
         || RE_COMPLETED.is_match(core_message)
+        || RE_CONTINUATION.is_match(core_message)
     {
         Some(Line::from(parse_ansi_colors(core_message)))
     } else {
