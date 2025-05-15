@@ -45,7 +45,6 @@ pub struct Theme {
     pub default: Color,
     pub border: Color,
     pub active_border: Color,
-    pub underline: Color,
 }
 
 pub const THEME: Theme = Theme {
@@ -55,7 +54,6 @@ pub const THEME: Theme = Theme {
     default: Color::White,
     border: Color::DarkGray,
     active_border: Color::White,
-    underline: Color::White,
 };
 
 pub const ANSI_RESET: &str = "\x1b[0m";
