@@ -204,6 +204,13 @@ impl App {
         self.app_view.apply_scroll(panel, direction, max_scroll);
     }
 
+    fn get_max_request_list_scroll(&self) -> usize {
+        self.state
+            .request_ids()
+            .len()
+            .saturating_sub(self.app_view.viewport_height(Panel::RequestList))
+    }
+
     fn get_max_detail_scroll(&self) -> usize {
         self.state.selected_entries_count().saturating_sub(1)
     }
@@ -255,8 +262,17 @@ impl App {
             event::MouseEventKind::ScrollDown | event::MouseEventKind::ScrollUp => {
                 match self.app_view.panel_at_point(x, y) {
                     Some(Panel::RequestList) => match mouse_event.kind {
-                        event::MouseEventKind::ScrollDown => self.next_request(SCROLL_UNIT),
-                        event::MouseEventKind::ScrollUp => self.previous_request(SCROLL_UNIT),
+                        event::MouseEventKind::ScrollDown => self.app_view.apply_scroll(
+                            Panel::RequestList,
+                            ScrollDirection::Down(SCROLL_UNIT),
+                            self.get_max_request_list_scroll(),
+                        ),
+                        event::MouseEventKind::ScrollUp => self.app_view.apply_scroll(
+                            Panel::RequestList,
+                            ScrollDirection::Up(SCROLL_UNIT),
+                            self.get_max_request_list_scroll(),
+                        ),
+
                         _ => {}
                     },
                     Some(panel) => match mouse_event.kind {
