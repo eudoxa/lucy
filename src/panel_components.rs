@@ -58,9 +58,7 @@ pub fn build_list_component(app: &App) -> List<'_> {
         ]);
 
         let style = if index == app.state.selected_index {
-            status_color
-                .style_with_modifier(Modifier::BOLD | Modifier::UNDERLINED)
-                .underline_color(THEME.underline)
+            status_color.style_with_modifier(Modifier::BOLD | Modifier::UNDERLINED)
         } else if finished {
             THEME.default.style().fg(status_color)
         } else {
