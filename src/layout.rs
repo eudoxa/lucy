@@ -35,15 +35,15 @@ impl LayoutInfo {
     }
 }
 
-pub fn calculate_layout(area: Rect) -> LayoutInfo {
+pub fn calculate_layout(area: Rect, ratios: &[f64; 3]) -> LayoutInfo {
     use ratatui::layout::{Constraint, Direction, Layout};
 
     let top_chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
-            Constraint::Ratio(2, 10),
-            Constraint::Ratio(6, 10),
-            Constraint::Ratio(2, 10),
+            Constraint::Percentage((ratios[0] * 100.0) as u16),
+            Constraint::Percentage((ratios[1] * 100.0) as u16),
+            Constraint::Percentage((ratios[2] * 100.0) as u16),
         ])
         .split(area);
 
@@ -74,7 +74,8 @@ mod tests {
     #[test]
     fn test_calculate_layout() {
         let area = Rect::new(0, 0, 100, 100);
-        let layout = calculate_layout(area);
+        let ratios = [0.20, 0.60, 0.20];
+        let layout = calculate_layout(area, &ratios);
 
         // Check all panels exist
         for panel in Panel::all().iter() {

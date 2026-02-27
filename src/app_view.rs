@@ -10,6 +10,8 @@ pub struct AppView {
     pub focused_panel: Panel,
     pub scroll_offsets: std::collections::HashMap<Panel, usize>,
     pub layout_info: LayoutInfo,
+    pub panel_ratios: [f64; 3],
+    pub dragging_border: Option<usize>,
 }
 
 impl AppView {
@@ -25,6 +27,8 @@ impl AppView {
             focused_panel: Panel::RequestList,
             scroll_offsets,
             layout_info: LayoutInfo::new(),
+            panel_ratios: [0.20, 0.60, 0.20],
+            dragging_border: None,
         }
     }
 
@@ -76,6 +80,54 @@ impl AppView {
         Panel::all()
             .into_iter()
             .find(|&panel| Self::is_in_region(x, y, &self.layout_info.region(panel)))
+    }
+
+    pub fn border_at_point(&self, x: u16) -> Option<usize> {
+        let list_region = self.layout_info.region(Panel::RequestList);
+        let detail_region = self.layout_info.region(Panel::RequestDetail);
+
+        let border0 = list_region.x + list_region.width;
+        let border1 = detail_region.x + detail_region.width;
+
+        if x.abs_diff(border0) <= 1 {
+            Some(0)
+        } else if x.abs_diff(border1) <= 1 {
+            Some(1)
+        } else {
+            None
+        }
+    }
+
+    pub fn apply_drag(&mut self, x: u16, total_width: u16) {
+        const MIN_RATIO: f64 = 0.10;
+
+        let Some(border_idx) = self.dragging_border else {
+            return;
+        };
+
+        let ratio = x as f64 / total_width as f64;
+
+        match border_idx {
+            0 => {
+                // Dragging border between List and Detail
+                let new_list = ratio.clamp(MIN_RATIO, 1.0 - self.panel_ratios[2] - MIN_RATIO);
+                let new_detail = 1.0 - new_list - self.panel_ratios[2];
+                if new_detail >= MIN_RATIO {
+                    self.panel_ratios[0] = new_list;
+                    self.panel_ratios[1] = new_detail;
+                }
+            }
+            1 => {
+                // Dragging border between Detail and Sql
+                let new_sql = (1.0 - ratio).clamp(MIN_RATIO, 1.0 - self.panel_ratios[0] - MIN_RATIO);
+                let new_detail = 1.0 - self.panel_ratios[0] - new_sql;
+                if new_detail >= MIN_RATIO {
+                    self.panel_ratios[1] = new_detail;
+                    self.panel_ratios[2] = new_sql;
+                }
+            }
+            _ => {}
+        }
     }
 }
 

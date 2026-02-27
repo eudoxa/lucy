@@ -46,7 +46,8 @@ impl App {
                 }
             }
         } else {
-            self.app_view.layout_info = crate::layout::calculate_layout(f.area());
+            self.app_view.layout_info =
+                crate::layout::calculate_layout(f.area(), &self.app_view.panel_ratios);
 
             let request_list_region = self.app_view.layout_info.region(Panel::RequestList);
             let request_detail_region = self.app_view.layout_info.region(Panel::RequestDetail);
@@ -310,24 +311,43 @@ impl App {
             }
 
             event::MouseEventKind::Down(event::MouseButton::Left) => {
-                match self.app_view.panel_at_point(x, y) {
-                    Some(panel) if matches!(panel, Panel::RequestList) => {
-                        self.app_view.focused_panel = panel;
-                        let row_in_list =
-                            y.saturating_sub(layout_info.region(Panel::RequestList).y + 2);
-                        let current_offset = self.app_view.get_scroll_offset(Panel::RequestList);
-                        let clicked_index = current_offset + row_in_list as usize;
+                if let Some(border_idx) = self.app_view.border_at_point(x) {
+                    self.app_view.dragging_border = Some(border_idx);
+                } else {
+                    match self.app_view.panel_at_point(x, y) {
+                        Some(panel) if matches!(panel, Panel::RequestList) => {
+                            self.app_view.focused_panel = panel;
+                            let row_in_list =
+                                y.saturating_sub(layout_info.region(Panel::RequestList).y + 2);
+                            let current_offset =
+                                self.app_view.get_scroll_offset(Panel::RequestList);
+                            let clicked_index = current_offset + row_in_list as usize;
 
-                        if clicked_index < self.state.request_ids.len() {
-                            self.select_request(clicked_index);
+                            if clicked_index < self.state.request_ids.len() {
+                                self.select_request(clicked_index);
+                            }
                         }
+                        Some(panel) => {
+                            self.app_view.focused_panel = panel;
+                        }
+                        _ => {}
                     }
-                    Some(panel) => {
-                        self.app_view.focused_panel = panel;
-                    }
-                    _ => {}
                 }
             }
+
+            event::MouseEventKind::Drag(event::MouseButton::Left) => {
+                if self.app_view.dragging_border.is_some() {
+                    let total_width = layout_info.region(Panel::RequestList).width
+                        + layout_info.region(Panel::RequestDetail).width
+                        + layout_info.region(Panel::SqlInfo).width;
+                    self.app_view.apply_drag(x, total_width);
+                }
+            }
+
+            event::MouseEventKind::Up(event::MouseButton::Left) => {
+                self.app_view.dragging_border = None;
+            }
+
             _ => {}
         }
     }
