@@ -52,9 +52,9 @@ pub fn format_simple_log_line(line: &str) -> Option<Line<'static>> {
 
 pub fn parse_ansi_colors(text: &str) -> Vec<Span<'static>> {
     match text.into_text() {
-        Ok(parsed_text) => {
+        Ok(mut parsed_text) => {
             if !parsed_text.lines.is_empty() {
-                parsed_text.lines[0].spans.clone()
+                parsed_text.lines.remove(0).spans
             } else {
                 vec![Span::raw(text.to_string())]
             }
