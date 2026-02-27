@@ -17,9 +17,12 @@ pub enum QueryType {
     Delete,
 }
 
+const N_PLUS_ONE_THRESHOLD: usize = 5;
+
 pub struct SqlQueryInfo {
     pub query_counts: HashMap<QueryType, usize>,
     pub table_counts: HashMap<String, usize>,
+    pub select_per_table: HashMap<String, usize>,
 }
 
 impl SqlQueryInfo {
@@ -33,6 +36,7 @@ impl SqlQueryInfo {
         Self {
             query_counts,
             table_counts: HashMap::new(),
+            select_per_table: HashMap::new(),
         }
     }
 
@@ -59,6 +63,13 @@ impl SqlQueryInfo {
         for (table_name, count) in &other.table_counts {
             *self.table_counts.entry(table_name.clone()).or_insert(0) += count;
         }
+
+        for (table_name, count) in &other.select_per_table {
+            *self
+                .select_per_table
+                .entry(table_name.clone())
+                .or_insert(0) += count;
+        }
     }
 
     pub fn total_queries(&self) -> usize {
@@ -77,6 +88,12 @@ impl SqlQueryInfo {
 
     pub fn display_line_count(&self) -> usize {
         self.table_counts.len() + 4
+    }
+
+    pub fn is_n_plus_one(&self, table: &str) -> bool {
+        self.select_per_table
+            .get(table)
+            .is_some_and(|&count| count >= N_PLUS_ONE_THRESHOLD)
     }
 }
 
@@ -106,6 +123,13 @@ pub fn parse_sql_from_logs(logs: &[&str]) -> SqlQueryInfo {
                         .table_counts
                         .entry(table_name.to_string())
                         .or_insert(0) += 1;
+
+                    if query_type == QueryType::Select {
+                        *sql_info
+                            .select_per_table
+                            .entry(table_name.to_string())
+                            .or_insert(0) += 1;
+                    }
                 }
             }
         }
@@ -216,6 +240,45 @@ mod tests {
 
         info.table_counts.insert("orders".to_string(), 1);
         assert_eq!(info.display_line_count(), 6); // Base + 2 tables
+    }
+
+    #[test]
+    fn test_n_plus_one_detection() {
+        let logs: Vec<&str> = (0..5)
+            .map(|_| "SQL (0.5ms) SELECT * FROM users WHERE id = 1")
+            .collect();
+        let info = parse_sql_from_logs(&logs);
+
+        assert!(info.is_n_plus_one("users"));
+        assert_eq!(*info.select_per_table.get("users").unwrap(), 5);
+    }
+
+    #[test]
+    fn test_n_plus_one_below_threshold() {
+        let logs = [
+            "SQL (0.5ms) SELECT * FROM users WHERE id = 1",
+            "SQL (0.5ms) SELECT * FROM users WHERE id = 2",
+            "SQL (0.5ms) SELECT * FROM users WHERE id = 3",
+            "SQL (0.5ms) SELECT * FROM users WHERE id = 4",
+        ];
+        let info = parse_sql_from_logs(&logs);
+
+        assert!(!info.is_n_plus_one("users"));
+    }
+
+    #[test]
+    fn test_n_plus_one_only_counts_selects() {
+        let logs = [
+            "SQL (0.5ms) SELECT * FROM users WHERE id = 1",
+            "SQL (0.5ms) UPDATE users SET name = 'test'",
+            "SQL (0.5ms) INSERT INTO users (name) VALUES ('test')",
+            "SQL (0.5ms) DELETE FROM users WHERE id = 2",
+            "SQL (0.5ms) SELECT * FROM users WHERE id = 3",
+        ];
+        let info = parse_sql_from_logs(&logs);
+
+        assert!(!info.is_n_plus_one("users"));
+        assert_eq!(*info.select_per_table.get("users").unwrap(), 2);
     }
 
     #[test]
