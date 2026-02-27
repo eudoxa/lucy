@@ -3,7 +3,7 @@ use crate::app_state::StatusType;
 use crate::layout::Panel;
 use crate::log_parser::strip_ansi_for_parsing;
 use crate::simple_formatter::{format_simple_log_line, parse_ansi_colors};
-use crate::sql_info::QueryType;
+use crate::sql_info::{QueryType, SqlQueryInfo};
 use crate::theme::{ColorExt, THEME};
 use ratatui::{
     style::{Color, Modifier, Style},
@@ -14,26 +14,24 @@ use ratatui::{
 const INDEX_OFFSET: usize = 1;
 
 pub fn build_list_component(app: &App) -> List<'_> {
-    let mut items = Vec::with_capacity(app.state.log_group_count());
+    let visible_requests = app.visible_request_ids();
+    let total_visible = visible_requests.len();
+
+    let mut items = Vec::with_capacity(total_visible);
 
     let viewport_height = app.app_view.viewport_height(Panel::RequestList);
     let current_offset = app.app_view.get_scroll_offset(Panel::RequestList);
-    let visible_count =
-        viewport_height.min(app.state.log_group_count().saturating_sub(current_offset));
-    let end_idx = current_offset + visible_count;
+    let visible_count = viewport_height.min(total_visible.saturating_sub(current_offset));
 
-    for index in current_offset..end_idx {
-        if index >= app.state.log_group_count() {
-            break;
-        }
-
-        let request_id = &app.state.request_ids[index];
+    for &(original_index, request_id) in visible_requests
+        .iter()
+        .skip(current_offset)
+        .take(visible_count)
+    {
         let group = app.state.logs_by_request_id.get(request_id).unwrap();
-        let time_str = group.first_timestamp.format("%H:%M:%S").to_string();
+        let time_str = group.first_timestamp.format("%H:%M").to_string();
 
         let finished = group.finished;
-        let log_count = group.entries.len();
-        let sql_count = group.sql_query_info.total_queries();
 
         let status_color = if finished {
             match group.status_type {
@@ -46,16 +44,23 @@ pub fn build_list_component(app: &App) -> List<'_> {
             THEME.default
         };
 
+        let duration_str = match group.duration_ms {
+            Some(ms) => format!("{:>4}ms ", ms),
+            None => " ---ms ".to_string(),
+        };
+        let duration_color = match group.duration_ms {
+            Some(ms) if ms >= 3000 => Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+            Some(ms) if ms >= 500 => Style::default().fg(Color::Yellow),
+            _ => Style::default().fg(Color::Cyan),
+        };
+
         let content = Line::from(vec![
             Span::raw(format!("{} ", time_str)),
-            Span::styled(
-                format!("{:2}-{:2} ", log_count, sql_count),
-                THEME.default.style().fg(Color::Cyan),
-            ),
+            Span::styled(duration_str, duration_color),
             Span::styled(group.title.as_str(), status_color),
         ]);
 
-        let style = if index == app.state.selected_index {
+        let style = if original_index == app.state.selected_index {
             status_color.style_with_modifier(Modifier::BOLD | Modifier::UNDERLINED)
         } else if finished {
             THEME.default.style().fg(status_color)
@@ -72,15 +77,23 @@ pub fn build_list_component(app: &App) -> List<'_> {
     };
 
     let total_requests = app.state.log_group_count();
-    let scroll_info = if total_requests == 0 {
+    let scroll_info = if total_visible == 0 {
         "0/0".to_string()
+    } else if app.filtered_indices.is_some() {
+        format!("{}/{}", total_visible, total_requests)
     } else {
         let start_idx = current_offset + INDEX_OFFSET;
-        let end_idx = (start_idx + visible_count - INDEX_OFFSET).min(total_requests);
+        let end_idx = (start_idx + visible_count - INDEX_OFFSET).min(total_visible);
         format!("{}-{}/{}", start_idx, end_idx, total_requests)
     };
 
-    let title_text = format!("[{}]", scroll_info);
+    let is_list_search = matches!(app.search_mode, Some(crate::app::SearchTarget::RequestList));
+    let title_text = if is_list_search || app.filtered_indices.is_some() {
+        format!("[{}] /{}", scroll_info, app.search_query)
+    } else {
+        format!("[{}]", scroll_info)
+    };
+
     let title_style = match app.app_view.focused_panel {
         Panel::RequestList => THEME.default.style_with_modifier(Modifier::BOLD),
         _ => THEME.default.style(),
@@ -92,14 +105,25 @@ pub fn build_list_component(app: &App) -> List<'_> {
         Borders::ALL
     };
 
-    List::new(items).block(
-        Block::default()
-            .borders(borders)
-            .border_type(BorderType::Rounded)
-            .border_style(border_style)
-            .padding(Padding::new(1, 1, 1, 1))
-            .title(Span::styled(title_text, title_style)),
-    )
+    let mut block = Block::default()
+        .borders(borders)
+        .border_type(BorderType::Rounded)
+        .border_style(border_style)
+        .padding(Padding::new(1, 1, 1, 1))
+        .title(Span::styled(title_text, title_style));
+
+    if is_list_search {
+        let search_display = format!(" /{}_ ", app.search_query);
+        block = block.title_bottom(
+            Line::from(Span::styled(
+                search_display,
+                Style::default().fg(Color::Yellow),
+            ))
+            .alignment(ratatui::layout::Alignment::Left),
+        );
+    }
+
+    List::new(items).block(block)
 }
 
 pub fn build_detail_component(app: &App) -> Paragraph<'_> {
@@ -146,17 +170,19 @@ pub fn build_detail_component(app: &App) -> Paragraph<'_> {
             let viewport_height = app.app_view.viewport_height(Panel::RequestDetail);
             let detail_scroll_offset = app.app_view.get_scroll_offset(Panel::RequestDetail);
 
+            let sql_info = &group.sql_query_info;
+            let detail_query = &app.detail_search_query;
             let (display_lines, total_display_entries) = if app.simple_mode_enabled {
-                // Filter logs for Simple Mode using format_simple_log_line
                 let simple_lines: Vec<Line<'static>> = group
                     .entries
                     .iter()
                     .filter_map(|log| format_simple_log_line(&log.message))
+                    .map(|line| highlight_n_plus_one_tables(line, sql_info))
+                    .map(|line| highlight_search_matches(line, detail_query))
                     .collect();
                 let count = simple_lines.len();
                 (simple_lines, count)
             } else {
-                // Prepare lines for Normal Mode
                 let normal_lines: Vec<Line<'static>> = group
                     .entries
                     .iter()
@@ -170,7 +196,9 @@ pub fn build_detail_component(app: &App) -> Paragraph<'_> {
                             log.message.clone()
                         };
                         let spans = parse_ansi_colors(&message);
-                        Line::from(spans)
+                        let line = Line::from(spans);
+                        let line = highlight_n_plus_one_tables(line, sql_info);
+                        highlight_search_matches(line, detail_query)
                     })
                     .collect();
                 let count = normal_lines.len();
@@ -237,17 +265,47 @@ pub fn build_detail_component(app: &App) -> Paragraph<'_> {
         Borders::ALL
     };
 
+    let is_detail_search =
+        matches!(app.search_mode, Some(crate::app::SearchTarget::DetailLog));
+    let has_detail_query = !app.detail_search_query.is_empty();
+
+    let bottom_line = if is_detail_search {
+        Line::from(vec![
+            Span::styled(
+                format!(" /{}_ ", app.detail_search_query),
+                Style::default().fg(Color::Yellow),
+            ),
+            Span::styled(
+                format!("  {}", help_text(app)),
+                Style::default().fg(Color::DarkGray),
+            ),
+        ])
+        .alignment(ratatui::layout::Alignment::Left)
+    } else if has_detail_query {
+        Line::from(vec![
+            Span::styled(
+                format!(" /{} ", app.detail_search_query),
+                Style::default().fg(Color::Yellow),
+            ),
+            Span::styled(
+                format!("  {}", help_text(app)),
+                Style::default().fg(Color::DarkGray),
+            ),
+        ])
+        .alignment(ratatui::layout::Alignment::Left)
+    } else {
+        Line::from(vec![Span::styled(
+            help_text(app),
+            Style::default().fg(Color::DarkGray),
+        )])
+        .alignment(ratatui::layout::Alignment::Right)
+    };
+
     let block = Block::default()
         .padding(Padding::new(1, 1, 1, 1))
         .title_alignment(ratatui::layout::Alignment::Left)
         .title(Span::styled(title_text, title_style))
-        .title_bottom(
-            Line::from(vec![Span::styled(
-                help_text(app),
-                Style::default().fg(Color::DarkGray),
-            )])
-            .alignment(ratatui::layout::Alignment::Right),
-        )
+        .title_bottom(bottom_line)
         .borders(borders)
         .border_style(border_style);
 
@@ -268,9 +326,10 @@ fn help_text(app: &App) -> String {
         return format!(" COPY MODE [{}] (Tab: switch panel | m: exit) ", panel_name);
     }
     if app.simple_mode_enabled {
-        " SIMPLE MODE (press 's' to exit) | j/k | Tab/Shift+Tab | Ctrl+c | m: copy ".to_string()
+        " SIMPLE MODE (press 's' to exit) | j/k | Tab/Shift+Tab | Ctrl+c | m: copy | /: search"
+            .to_string()
     } else {
-        " j/k | Ctrl+d/u | Tab/Shift+Tab | Ctrl+c | m: copy | s: simple".to_string()
+        " j/k | Ctrl+d/u | Tab/Shift+Tab | Ctrl+c | m: copy | s: simple | /: search".to_string()
     }
 }
 
@@ -309,7 +368,7 @@ pub fn build_sql_component(app: &App) -> Paragraph<'_> {
         if !sql_info.table_counts.is_empty() {
             text.extend(Text::from(Line::from("")));
             for (table, count) in sql_info.sorted_tables() {
-                text.extend(Text::from(Line::from(vec![
+                let mut spans = vec![
                     Span::styled(
                         format!("{}: ", table),
                         Style::default()
@@ -317,7 +376,16 @@ pub fn build_sql_component(app: &App) -> Paragraph<'_> {
                             .add_modifier(Modifier::BOLD),
                     ),
                     Span::raw(count.to_string()),
-                ])));
+                ];
+                if sql_info.is_n_plus_one(table) {
+                    spans.push(Span::styled(
+                        " N+1?",
+                        Style::default()
+                            .fg(Color::Yellow)
+                            .add_modifier(Modifier::BOLD),
+                    ));
+                }
+                text.extend(Text::from(Line::from(spans)));
             }
         }
     }
@@ -352,4 +420,108 @@ pub fn build_sql_component(app: &App) -> Paragraph<'_> {
         .block(block)
         .wrap(Wrap { trim: true })
         .scroll((sql_scroll_offset as u16, 0))
+}
+
+fn highlight_n_plus_one_tables<'a>(line: Line<'a>, sql_info: &SqlQueryInfo) -> Line<'a> {
+    let n1_tables: Vec<&String> = sql_info
+        .select_per_table
+        .iter()
+        .filter(|(t, _)| sql_info.is_n_plus_one(t))
+        .map(|(t, _)| t)
+        .collect();
+
+    if n1_tables.is_empty() {
+        return line;
+    }
+
+    let highlight_style = Style::default()
+        .fg(Color::Yellow)
+        .add_modifier(Modifier::BOLD);
+
+    let mut new_spans: Vec<Span<'a>> = Vec::new();
+
+    for span in line.spans {
+        let content: &str = &span.content;
+        let mut remaining = content.to_string();
+        let mut parts: Vec<Span<'a>> = Vec::new();
+        let mut found = true;
+
+        while found {
+            found = false;
+            // Find the earliest matching table name in the remaining text
+            let mut earliest: Option<(usize, &String)> = None;
+            for table in &n1_tables {
+                if let Some(pos) = remaining.find(table.as_str())
+                    && (earliest.is_none() || pos < earliest.unwrap().0)
+                {
+                    earliest = Some((pos, table));
+                }
+            }
+
+            if let Some((pos, table)) = earliest {
+                found = true;
+                if pos > 0 {
+                    parts.push(Span::styled(remaining[..pos].to_string(), span.style));
+                }
+                parts.push(Span::styled(table.to_string(), highlight_style));
+                remaining = remaining[pos + table.len()..].to_string();
+            }
+        }
+
+        if !remaining.is_empty() {
+            parts.push(Span::styled(remaining, span.style));
+        }
+
+        if parts.is_empty() {
+            new_spans.push(span);
+        } else {
+            new_spans.extend(parts);
+        }
+    }
+
+    Line::from(new_spans)
+}
+
+fn highlight_search_matches<'a>(line: Line<'a>, query: &str) -> Line<'a> {
+    if query.is_empty() {
+        return line;
+    }
+
+    let highlight_style = Style::default()
+        .bg(Color::Yellow)
+        .fg(Color::Black)
+        .add_modifier(Modifier::BOLD);
+
+    let query_lower = query.to_lowercase();
+    let mut new_spans: Vec<Span<'a>> = Vec::new();
+
+    for span in line.spans {
+        let content: &str = &span.content;
+        let content_lower = content.to_lowercase();
+        let mut last_end = 0;
+        let mut parts: Vec<Span<'a>> = Vec::new();
+
+        for (start, _) in content_lower.match_indices(&query_lower) {
+            let end = start + query.len();
+            if start > last_end {
+                parts.push(Span::styled(content[last_end..start].to_string(), span.style));
+            }
+            parts.push(Span::styled(
+                content[start..end].to_string(),
+                highlight_style,
+            ));
+            last_end = end;
+        }
+
+        if parts.is_empty() {
+            new_spans.push(span);
+        } else {
+            if last_end < content.len() {
+                parts.push(Span::styled(content[last_end..].to_string(), span.style));
+            }
+            new_spans.extend(parts);
+        }
+    }
+
+    Line::from(new_spans)
 }

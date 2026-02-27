@@ -8,11 +8,20 @@ const SCROLL_UNIT: usize = 1;
 const SCROLL_PAGE_SIZE: usize = 10;
 const REQUEST_SKIP_COUNT: usize = 3;
 
+pub enum SearchTarget {
+    RequestList,
+    DetailLog,
+}
+
 pub struct App {
     pub state: AppState,
     pub app_view: AppView,
     pub copy_mode_enabled: bool,
     pub simple_mode_enabled: bool,
+    pub search_mode: Option<SearchTarget>,
+    pub search_query: String,
+    pub filtered_indices: Option<Vec<usize>>,
+    pub detail_search_query: String,
 }
 
 impl App {
@@ -22,6 +31,10 @@ impl App {
             app_view: AppView::new(),
             copy_mode_enabled: false,
             simple_mode_enabled: false,
+            search_mode: None,
+            search_query: String::new(),
+            filtered_indices: None,
+            detail_search_query: String::new(),
         }
     }
 
@@ -97,11 +110,76 @@ impl App {
                     }
 
                     match event_result.unwrap() {
+                        Event::Key(key) if self.search_mode.is_some() => match key.code {
+                            KeyCode::Esc => {
+                                match &self.search_mode {
+                                    Some(SearchTarget::RequestList) => {
+                                        self.search_query.clear();
+                                        self.filtered_indices = None;
+                                    }
+                                    Some(SearchTarget::DetailLog) => {
+                                        self.detail_search_query.clear();
+                                    }
+                                    None => {}
+                                }
+                                self.search_mode = None;
+                            }
+                            KeyCode::Enter => {
+                                self.search_mode = None;
+                                // Keep filter/highlight active
+                            }
+                            KeyCode::Backspace => match &self.search_mode {
+                                Some(SearchTarget::RequestList) => {
+                                    self.search_query.pop();
+                                    self.update_filter();
+                                }
+                                Some(SearchTarget::DetailLog) => {
+                                    self.detail_search_query.pop();
+                                }
+                                None => {}
+                            },
+                            KeyCode::Char('c')
+                                if key.modifiers.contains(event::KeyModifiers::CONTROL) =>
+                            {
+                                return Ok(());
+                            }
+                            KeyCode::Char(c) => match &self.search_mode {
+                                Some(SearchTarget::RequestList) => {
+                                    self.search_query.push(c);
+                                    self.update_filter();
+                                }
+                                Some(SearchTarget::DetailLog) => {
+                                    self.detail_search_query.push(c);
+                                }
+                                None => {}
+                            },
+                            _ => {}
+                        },
                         Event::Key(key) => match key.code {
                             KeyCode::Char('c')
                                 if key.modifiers.contains(event::KeyModifiers::CONTROL) =>
                             {
                                 return Ok(());
+                            }
+                            KeyCode::Char('/') => match self.app_view.focused_panel {
+                                Panel::RequestList => {
+                                    self.search_mode = Some(SearchTarget::RequestList);
+                                    self.search_query.clear();
+                                    self.filtered_indices = None;
+                                }
+                                Panel::RequestDetail => {
+                                    self.search_mode = Some(SearchTarget::DetailLog);
+                                    self.detail_search_query.clear();
+                                }
+                                _ => {}
+                            },
+                            KeyCode::Esc
+                                if self.filtered_indices.is_some()
+                                    || !self.detail_search_query.is_empty() =>
+                            {
+                                self.search_query.clear();
+                                self.filtered_indices = None;
+                                self.detail_search_query.clear();
                             }
                             KeyCode::BackTab => self.toggle_focus_reverse(),
                             KeyCode::Tab => self.toggle_focus(),
@@ -275,6 +353,49 @@ impl App {
     fn toggle_simple_mode(&mut self) -> color_eyre::Result<()> {
         self.simple_mode_enabled = !self.simple_mode_enabled;
         Ok(())
+    }
+
+    fn update_filter(&mut self) {
+        if self.search_query.is_empty() {
+            self.filtered_indices = None;
+            return;
+        }
+        let query_lower = self.search_query.to_lowercase();
+        let indices: Vec<usize> = self
+            .state
+            .request_ids
+            .iter()
+            .enumerate()
+            .filter(|(_, req_id)| {
+                self.state
+                    .logs_by_request_id
+                    .get(*req_id)
+                    .is_some_and(|group| group.title.to_lowercase().contains(&query_lower))
+            })
+            .map(|(i, _)| i)
+            .collect();
+        self.filtered_indices = Some(indices);
+    }
+
+    pub fn visible_request_ids(&self) -> Vec<(usize, &str)> {
+        match &self.filtered_indices {
+            Some(indices) => indices
+                .iter()
+                .filter_map(|&i| {
+                    self.state
+                        .request_ids
+                        .get(i)
+                        .map(|id| (i, id.as_str()))
+                })
+                .collect(),
+            None => self
+                .state
+                .request_ids
+                .iter()
+                .enumerate()
+                .map(|(i, id)| (i, id.as_str()))
+                .collect(),
+        }
     }
 
     fn handle_mouse_event(&mut self, mouse_event: event::MouseEvent, layout_info: &LayoutInfo) {
