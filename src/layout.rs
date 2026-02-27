@@ -53,6 +53,10 @@ pub fn calculate_layout(area: Rect) -> LayoutInfo {
         .with_region(Panel::SqlInfo, top_chunks[2])
 }
 
+pub fn calculate_single_panel_layout(area: Rect, panel: Panel) -> LayoutInfo {
+    LayoutInfo::new().with_region(panel, area)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -88,7 +92,7 @@ mod tests {
         assert_eq!(request_list.y, 0);
         assert_eq!(request_detail.y, 0);
 
-        assert!(sql_info.y > request_detail.y);
+        assert_eq!(sql_info.y, request_detail.y);
 
         // RequestList should be to the left of RequestDetail
         assert!(request_list.x < request_detail.x);

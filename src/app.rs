@@ -26,20 +26,41 @@ impl App {
     }
 
     pub fn render(&mut self, f: &mut ratatui::Frame) {
-        self.app_view.layout_info = crate::layout::calculate_layout(f.area());
+        if self.copy_mode_enabled {
+            let focused = self.app_view.focused_panel;
+            self.app_view.layout_info =
+                crate::layout::calculate_single_panel_layout(f.area(), focused);
+            let region = self.app_view.layout_info.region(focused);
+            match focused {
+                Panel::RequestList => {
+                    let widget = panel_components::build_list_component(self);
+                    f.render_widget(widget, region);
+                }
+                Panel::RequestDetail => {
+                    let widget = panel_components::build_detail_component(self);
+                    f.render_widget(widget, region);
+                }
+                Panel::SqlInfo => {
+                    let widget = panel_components::build_sql_component(self);
+                    f.render_widget(widget, region);
+                }
+            }
+        } else {
+            self.app_view.layout_info = crate::layout::calculate_layout(f.area());
 
-        let request_list_region = self.app_view.layout_info.region(Panel::RequestList);
-        let request_detail_region = self.app_view.layout_info.region(Panel::RequestDetail);
-        let sql_info_region = self.app_view.layout_info.region(Panel::SqlInfo);
+            let request_list_region = self.app_view.layout_info.region(Panel::RequestList);
+            let request_detail_region = self.app_view.layout_info.region(Panel::RequestDetail);
+            let sql_info_region = self.app_view.layout_info.region(Panel::SqlInfo);
 
-        let request_list = panel_components::build_list_component(self);
-        f.render_widget(request_list, request_list_region);
+            let request_list = panel_components::build_list_component(self);
+            f.render_widget(request_list, request_list_region);
 
-        let detail_panel = panel_components::build_detail_component(self);
-        f.render_widget(detail_panel, request_detail_region);
+            let detail_panel = panel_components::build_detail_component(self);
+            f.render_widget(detail_panel, request_detail_region);
 
-        let sql_panel = panel_components::build_sql_component(self);
-        f.render_widget(sql_panel, sql_info_region);
+            let sql_panel = panel_components::build_sql_component(self);
+            f.render_widget(sql_panel, sql_info_region);
+        }
     }
 
     pub fn run<B: ratatui::backend::Backend>(

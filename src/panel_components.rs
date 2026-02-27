@@ -88,9 +88,15 @@ pub fn build_list_component(app: &App) -> List<'_> {
         _ => THEME.default.style(),
     };
 
+    let borders = if app.copy_mode_enabled {
+        Borders::TOP | Borders::BOTTOM
+    } else {
+        Borders::ALL
+    };
+
     List::new(items).block(
         Block::default()
-            .borders(Borders::ALL)
+            .borders(borders)
             .border_type(BorderType::Rounded)
             .border_style(border_style)
             .padding(Padding::new(1, 1, 1, 1))
@@ -227,6 +233,12 @@ pub fn build_detail_component(app: &App) -> Paragraph<'_> {
     };
 
     let title_style = status.to_color().style_with_modifier(Modifier::BOLD);
+    let borders = if app.copy_mode_enabled {
+        Borders::TOP | Borders::BOTTOM
+    } else {
+        Borders::ALL
+    };
+
     let block = Block::default()
         .padding(Padding::new(1, 1, 1, 1))
         .title_alignment(ratatui::layout::Alignment::Left)
@@ -238,7 +250,7 @@ pub fn build_detail_component(app: &App) -> Paragraph<'_> {
             )])
             .alignment(ratatui::layout::Alignment::Right),
         )
-        .borders(Borders::ALL)
+        .borders(borders)
         .border_style(border_style);
 
     if app.simple_mode_enabled {
@@ -248,13 +260,19 @@ pub fn build_detail_component(app: &App) -> Paragraph<'_> {
     }
 }
 
-fn help_text(app: &App) -> &str {
+fn help_text(app: &App) -> String {
     if app.copy_mode_enabled {
-        " COPY MODE (press 'm' to exit) "
-    } else if app.simple_mode_enabled {
-        " SIMPLE MODE (press 's' to exit) | j/k | Tab/Shift+Tab | Ctrl+c | m: copy "
+        let panel_name = match app.app_view.focused_panel {
+            Panel::RequestList => "RequestList",
+            Panel::RequestDetail => "RequestDetail",
+            Panel::SqlInfo => "SqlInfo",
+        };
+        return format!(" COPY MODE [{}] (Tab: switch panel | m: exit) ", panel_name);
+    }
+    if app.simple_mode_enabled {
+        " SIMPLE MODE (press 's' to exit) | j/k | Tab/Shift+Tab | Ctrl+c | m: copy ".to_string()
     } else {
-        " j/k | Ctrl+d/u | Tab/Shift+Tab | Ctrl+c | m: copy | s: simple"
+        " j/k | Ctrl+d/u | Tab/Shift+Tab | Ctrl+c | m: copy | s: simple".to_string()
     }
 }
 
@@ -317,9 +335,15 @@ pub fn build_sql_component(app: &App) -> Paragraph<'_> {
         "0/0".to_string()
     };
 
+    let borders = if app.copy_mode_enabled {
+        Borders::TOP | Borders::BOTTOM
+    } else {
+        Borders::ALL
+    };
+
     let title_text = format!("[{}] ", scroll_info);
     let block = Block::default()
-        .borders(Borders::ALL)
+        .borders(borders)
         .border_style(border_style)
         .padding(Padding::new(1, 1, 0, 0))
         .title(title_text);
