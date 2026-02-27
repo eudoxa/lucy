@@ -227,7 +227,7 @@ impl App {
 
     fn get_max_request_list_scroll(&self) -> usize {
         self.state
-            .request_ids()
+            .request_ids
             .len()
             .saturating_sub(self.app_view.viewport_height(Panel::RequestList))
     }
@@ -318,7 +318,7 @@ impl App {
                         let current_offset = self.app_view.get_scroll_offset(Panel::RequestList);
                         let clicked_index = current_offset + row_in_list as usize;
 
-                        if clicked_index < self.state.request_ids().len() {
+                        if clicked_index < self.state.request_ids.len() {
                             self.select_request(clicked_index);
                         }
                     }

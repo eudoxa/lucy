@@ -38,7 +38,7 @@ pub struct LogGroup {
 }
 
 impl LogGroup {
-    pub fn new(log_entry: &LogEntry) -> Self {
+    pub fn new(log_entry: LogEntry) -> Self {
         let mut group = Self {
             title: "...".to_string(),
             entries: VecDeque::with_capacity(10),
@@ -48,7 +48,7 @@ impl LogGroup {
             first_timestamp: log_entry.timestamp,
         };
 
-        group.add_entry(log_entry.clone());
+        group.add_entry(log_entry);
         group
     }
 
@@ -106,15 +106,8 @@ impl AppState {
         }
     }
 
-    pub fn request_ids(&self) -> Vec<&String> {
-        self.request_ids.iter().collect()
-    }
-
     pub fn selected_request_id(&self) -> Option<&String> {
-        match self.request_ids().get(self.selected_index) {
-            Some(id) => Some(*id),
-            None => None,
-        }
+        self.request_ids.get(self.selected_index)
     }
 
     pub fn log_group_count(&self) -> usize {
@@ -127,7 +120,7 @@ impl AppState {
     }
 
     pub fn select_request(&mut self, index: usize) -> bool {
-        if index < self.request_ids().len() {
+        if index < self.request_ids.len() {
             self.selected_index = index;
             true
         } else {
@@ -136,15 +129,15 @@ impl AppState {
     }
 
     pub fn next_request(&mut self, n: usize) -> bool {
-        if self.request_ids().is_empty() || n == 0 {
+        if self.request_ids.is_empty() || n == 0 {
             return false;
         }
-        let new_index = (self.selected_index + n).min(self.request_ids().len() - 1);
+        let new_index = (self.selected_index + n).min(self.request_ids.len() - 1);
         self.select_request(new_index)
     }
 
     pub fn previous_request(&mut self, n: usize) -> bool {
-        if self.request_ids().is_empty() || n == 0 {
+        if self.request_ids.is_empty() || n == 0 {
             return false;
         }
         let new_index = self.selected_index.saturating_sub(n);
@@ -161,27 +154,29 @@ impl AppState {
     }
 
     pub fn add_log_entry(&mut self, log_entry: LogEntry) -> bool {
-        self.all_logs.push(log_entry.clone());
-
         if log_entry.request_id.is_empty() {
+            self.all_logs.push(log_entry);
             return false;
         }
 
-        let request_id = log_entry.request_id.clone();
-        let is_new_request = !self.logs_by_request_id.contains_key(&request_id);
+        let is_new_request = !self.logs_by_request_id.contains_key(&log_entry.request_id);
 
         if is_new_request {
-            let new_group = LogGroup::new(&log_entry);
-            self.logs_by_request_id
-                .insert(request_id.clone(), new_group);
+            let request_id = log_entry.request_id.clone();
+            self.all_logs.push(log_entry.clone());
+            let new_group = LogGroup::new(log_entry);
+            self.request_ids.insert(0, request_id.clone());
+            self.logs_by_request_id.insert(request_id, new_group);
 
-            self.request_ids.insert(0, request_id);
             // 新しいリクエストが追加された場合、選択中のインデックスをずらす
             if self.selected_index > 0 || self.request_ids.len() > 1 {
                 self.selected_index = self.selected_index.saturating_add(1);
             }
-        } else if let Some(group) = self.logs_by_request_id.get_mut(&request_id) {
+        } else if let Some(group) = self.logs_by_request_id.get_mut(&log_entry.request_id) {
+            self.all_logs.push(log_entry.clone());
             group.add_entry(log_entry);
+        } else {
+            self.all_logs.push(log_entry);
         }
 
         is_new_request
@@ -197,7 +192,7 @@ mod tests {
     fn test_app_state_new() {
         let state = AppState::new();
         assert_eq!(state.selected_index, 0);
-        assert!(state.request_ids().is_empty());
+        assert!(state.request_ids.is_empty());
         assert!(state.logs_by_request_id.is_empty());
         assert!(state.request_ids.is_empty());
         assert!(state.all_logs.is_empty());
@@ -239,8 +234,8 @@ mod tests {
 
         let is_new = state.add_log_entry(log_entry);
         assert!(is_new);
-        assert_eq!(state.request_ids().len(), 1);
-        assert_eq!(state.request_ids()[0], "req-1");
+        assert_eq!(state.request_ids.len(), 1);
+        assert_eq!(state.request_ids[0], "req-1");
         assert_eq!(state.all_logs.len(), 1);
         assert_eq!(state.selected_index, 0);
 
@@ -253,7 +248,7 @@ mod tests {
 
         let is_new2 = state.add_log_entry(log_entry2);
         assert!(!is_new2);
-        assert_eq!(state.request_ids().len(), 1);
+        assert_eq!(state.request_ids.len(), 1);
         assert_eq!(state.all_logs.len(), 2);
         assert_eq!(state.selected_index, 0);
 
@@ -266,9 +261,9 @@ mod tests {
 
         let is_new3 = state.add_log_entry(log_entry3);
         assert!(is_new3);
-        assert_eq!(state.request_ids().len(), 2);
-        assert_eq!(state.request_ids()[0], "req-2");
-        assert_eq!(state.request_ids()[1], "req-1");
+        assert_eq!(state.request_ids.len(), 2);
+        assert_eq!(state.request_ids[0], "req-2");
+        assert_eq!(state.request_ids[1], "req-1");
         assert_eq!(state.all_logs.len(), 3);
         assert_eq!(state.selected_index, 1);
     }
@@ -325,13 +320,13 @@ mod tests {
             state.add_log_entry(log_entry);
         }
 
-        assert_eq!(state.request_ids()[0], "req-1");
-        assert_eq!(state.request_ids()[1], "req-2");
-        assert_eq!(state.request_ids()[2], "req-3");
+        assert_eq!(state.request_ids[0], "req-1");
+        assert_eq!(state.request_ids[1], "req-2");
+        assert_eq!(state.request_ids[2], "req-3");
 
-        let ids = state.request_ids();
-        assert_eq!(*ids[0], "req-1");
-        assert_eq!(*ids[1], "req-2");
-        assert_eq!(*ids[2], "req-3");
+        let ids = &state.request_ids;
+        assert_eq!(ids[0], "req-1");
+        assert_eq!(ids[1], "req-2");
+        assert_eq!(ids[2], "req-3");
     }
 }

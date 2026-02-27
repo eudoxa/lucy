@@ -27,13 +27,11 @@ pub fn build_list_component(app: &App) -> List<'_> {
             break;
         }
 
-        let request_id = app.state.request_ids()[index];
+        let request_id = &app.state.request_ids[index];
         let group = app.state.logs_by_request_id.get(request_id).unwrap();
         let time_str = group.first_timestamp.format("%H:%M:%S").to_string();
 
         let finished = group.finished;
-        let title = group.title.clone();
-
         let log_count = group.entries.len();
         let sql_count = group.sql_query_info.total_queries();
 
@@ -54,7 +52,7 @@ pub fn build_list_component(app: &App) -> List<'_> {
                 format!("{:2}-{:2} ", log_count, sql_count),
                 THEME.default.style().fg(Color::Cyan),
             ),
-            Span::styled(title, status_color),
+            Span::styled(group.title.as_str(), status_color),
         ]);
 
         let style = if index == app.state.selected_index {
@@ -142,7 +140,7 @@ pub fn build_detail_component(app: &App) -> Paragraph<'_> {
                     .collect::<String>();
                 Span::raw(text)
             } else {
-                Span::raw("".to_string())
+                Span::raw("")
             };
 
             let viewport_height = app.app_view.viewport_height(Panel::RequestDetail);
@@ -329,7 +327,7 @@ pub fn build_sql_component(app: &App) -> Paragraph<'_> {
         if total_queries == 0 {
             "0/0".to_string()
         } else {
-            format!("{}", total_queries)
+            total_queries.to_string()
         }
     } else {
         "0/0".to_string()

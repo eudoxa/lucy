@@ -1,4 +1,13 @@
+use once_cell::sync::Lazy;
+use regex::Regex;
 use std::collections::HashMap;
+
+static TABLE_PATTERN: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(
+        r#"(?:FROM|JOIN|UPDATE|INTO)\s+(?:"([a-zA-Z0-9_]+)"|([a-zA-Z0-9_]+))(?:\s|\)|$)"#,
+    )
+    .unwrap()
+});
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum QueryType {
@@ -74,16 +83,6 @@ impl SqlQueryInfo {
 pub fn parse_sql_from_logs(logs: &[&str]) -> SqlQueryInfo {
     let mut sql_info = SqlQueryInfo::new();
 
-    let table_pattern = match regex::Regex::new(
-        r#"(?:FROM|JOIN|UPDATE|INTO)\s+(?:"([a-zA-Z0-9_]+)"|([a-zA-Z0-9_]+))(?:\s|\)|$)"#,
-    ) {
-        Ok(re) => re,
-        Err(e) => {
-            eprintln!("Regex error: {}", e);
-            regex::Regex::new(r"").unwrap()
-        }
-    };
-
     for msg in logs {
         let query_type = if msg.contains("SELECT ") {
             Some(QueryType::Select)
@@ -99,7 +98,7 @@ pub fn parse_sql_from_logs(logs: &[&str]) -> SqlQueryInfo {
 
         if let Some(query_type) = query_type {
             *sql_info.query_counts.entry(query_type).or_insert(0) += 1;
-            for cap in table_pattern.captures_iter(msg) {
+            for cap in TABLE_PATTERN.captures_iter(msg) {
                 let table_name = cap.get(1).or_else(|| cap.get(2)).map(|m| m.as_str());
 
                 if let Some(table_name) = table_name {
