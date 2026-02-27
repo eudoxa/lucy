@@ -1,6 +1,11 @@
 use crate::{sql_info::SqlQueryInfo, theme::THEME};
+use once_cell::sync::Lazy;
 use ratatui::style::Color;
+use regex::Regex;
 use std::collections::{HashMap, VecDeque};
+
+static RE_COMPLETED_DURATION: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"Completed \d+ .+ in (\d+)ms").unwrap());
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum StatusType {
@@ -35,6 +40,7 @@ pub struct LogGroup {
     pub status_type: StatusType,
     pub sql_query_info: SqlQueryInfo,
     pub first_timestamp: chrono::DateTime<chrono::Local>,
+    pub duration_ms: Option<u64>,
 }
 
 impl LogGroup {
@@ -46,6 +52,7 @@ impl LogGroup {
             status_type: StatusType::Unknown,
             sql_query_info: SqlQueryInfo::new(),
             first_timestamp: log_entry.timestamp,
+            duration_ms: None,
         };
 
         group.add_entry(log_entry);
@@ -78,6 +85,11 @@ impl LogGroup {
                         _ => StatusType::Unknown,
                     };
                 }
+            }
+            if let Some(caps) = RE_COMPLETED_DURATION.captures(message)
+                && let Some(ms_str) = caps.get(1)
+            {
+                self.duration_ms = ms_str.as_str().parse::<u64>().ok();
             }
         }
 
