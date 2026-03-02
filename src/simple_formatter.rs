@@ -14,10 +14,8 @@ static RE_PROCESSING: LazyLock<Regex> = LazyLock::new(|| {
 static RE_PARAMETERS: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r#"Parameters: \{(?P<params>.*)\}"#).unwrap());
 static RE_SQL: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r#"(SELECT|INSERT|UPDATE|DELETE).*"#).unwrap());
-static RE_COMPLETED: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"Completed (?P<status>[0-9]+) [\w\s]+ in (?P<time>[0-9]+)ms"#).unwrap()
-});
+    LazyLock::new(|| Regex::new(r#"\(\d+\.\d+ms\)\s+(SELECT|INSERT|UPDATE|DELETE)\s"#).unwrap());
+use crate::log_parser::RE_COMPLETED;
 static RE_CONTINUATION: LazyLock<Regex> = LazyLock::new(|| Regex::new(r#"↳"#).unwrap());
 
 pub fn format_simple_log_line(line: &str) -> Option<Line<'static>> {

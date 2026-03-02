@@ -1,11 +1,10 @@
 use crate::{sql_info::SqlQueryInfo, theme::THEME};
 use ratatui::style::Color;
-use regex::Regex;
-use std::sync::LazyLock;
 use std::collections::{HashMap, VecDeque};
 
-static RE_COMPLETED_DURATION: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"Completed \d+ .+ in (\d+)ms").unwrap());
+type RequestIds = VecDeque<String>;
+
+const MAX_REQUESTS: usize = 10_000;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum StatusType {
@@ -28,9 +27,8 @@ impl StatusType {
 
 pub struct AppState {
     pub logs_by_request_id: HashMap<String, LogGroup>,
-    pub request_ids: Vec<String>,
+    pub request_ids: RequestIds,
     pub selected_index: usize,
-    pub all_logs: Vec<LogEntry>,
 }
 
 pub struct LogGroup {
@@ -68,23 +66,20 @@ impl LogGroup {
 
         if message.contains("Completed ") {
             self.finished = true;
-            if let Some(status_str) = message
-                .split_whitespace()
-                .skip_while(|&s| s != "Completed")
-                .nth(1)
-                && let Ok(status_code) = status_str.parse::<u16>()
-            {
-                self.status_type = match status_code {
-                    200..=299 => StatusType::Success,
-                    400..=499 => StatusType::Warning,
-                    500..=599 => StatusType::Error,
-                    _ => StatusType::Unknown,
-                };
-            }
-            if let Some(caps) = RE_COMPLETED_DURATION.captures(message)
-                && let Some(ms_str) = caps.get(1)
-            {
-                self.duration_ms = ms_str.as_str().parse::<u64>().ok();
+            if let Some(caps) = crate::log_parser::RE_COMPLETED.captures(message) {
+                if let Some(status_str) = caps.name("status")
+                    && let Ok(status_code) = status_str.as_str().parse::<u16>()
+                {
+                    self.status_type = match status_code {
+                        200..=299 => StatusType::Success,
+                        400..=499 => StatusType::Warning,
+                        500..=599 => StatusType::Error,
+                        _ => StatusType::Unknown,
+                    };
+                }
+                if let Some(ms_str) = caps.name("duration") {
+                    self.duration_ms = ms_str.as_str().parse::<u64>().ok();
+                }
             }
         }
 
@@ -107,9 +102,8 @@ impl AppState {
     pub fn new() -> Self {
         Self {
             logs_by_request_id: HashMap::new(),
-            request_ids: Vec::new(),
+            request_ids: VecDeque::new(),
             selected_index: 0,
-            all_logs: Vec::new(),
         }
     }
 
@@ -160,33 +154,41 @@ impl AppState {
             .map_or(0, |group| group.sql_query_info.display_line_count())
     }
 
-    pub fn add_log_entry(&mut self, log_entry: LogEntry) -> bool {
+    /// Returns (is_new_request, eviction_occurred)
+    pub fn add_log_entry(&mut self, log_entry: LogEntry) -> (bool, bool) {
         if log_entry.request_id.is_empty() {
-            self.all_logs.push(log_entry);
-            return false;
+            return (false, false);
         }
 
         let is_new_request = !self.logs_by_request_id.contains_key(&log_entry.request_id);
 
         if is_new_request {
             let request_id = log_entry.request_id.clone();
-            self.all_logs.push(log_entry.clone());
-            let new_group = LogGroup::new(log_entry);
-            self.request_ids.insert(0, request_id.clone());
-            self.logs_by_request_id.insert(request_id, new_group);
+            self.request_ids.push_front(request_id.clone());
+            self.logs_by_request_id
+                .insert(request_id, LogGroup::new(log_entry));
 
-            // 新しいリクエストが追加された場合、選択中のインデックスをずらす
+            // Shift the selected index to keep the same request selected
             if self.selected_index > 0 || self.request_ids.len() > 1 {
                 self.selected_index = self.selected_index.saturating_add(1);
             }
         } else if let Some(group) = self.logs_by_request_id.get_mut(&log_entry.request_id) {
-            self.all_logs.push(log_entry.clone());
             group.add_entry(log_entry);
-        } else {
-            self.all_logs.push(log_entry);
         }
 
-        is_new_request
+        // Evict oldest requests to cap memory usage
+        let mut evicted = false;
+        while self.request_ids.len() > MAX_REQUESTS {
+            if let Some(old_id) = self.request_ids.pop_back() {
+                self.logs_by_request_id.remove(&old_id);
+                evicted = true;
+                if self.selected_index >= self.request_ids.len() && self.selected_index > 0 {
+                    self.selected_index = self.request_ids.len() - 1;
+                }
+            }
+        }
+
+        (is_new_request, evicted)
     }
 }
 
@@ -201,8 +203,6 @@ mod tests {
         assert_eq!(state.selected_index, 0);
         assert!(state.request_ids.is_empty());
         assert!(state.logs_by_request_id.is_empty());
-        assert!(state.request_ids.is_empty());
-        assert!(state.all_logs.is_empty());
     }
 
     #[test]
@@ -239,11 +239,11 @@ mod tests {
             message: "Started GET /test".to_string(),
         };
 
-        let is_new = state.add_log_entry(log_entry);
+        let (is_new, _) = state.add_log_entry(log_entry);
         assert!(is_new);
         assert_eq!(state.request_ids.len(), 1);
         assert_eq!(state.request_ids[0], "req-1");
-        assert_eq!(state.all_logs.len(), 1);
+        assert_eq!(state.logs_by_request_id.values().map(|g| g.entries.len()).sum::<usize>(), 1);
         assert_eq!(state.selected_index, 0);
 
         // Add entry with same request ID
@@ -253,10 +253,10 @@ mod tests {
             message: "Processing by TestController".to_string(),
         };
 
-        let is_new2 = state.add_log_entry(log_entry2);
+        let (is_new2, _) = state.add_log_entry(log_entry2);
         assert!(!is_new2);
         assert_eq!(state.request_ids.len(), 1);
-        assert_eq!(state.all_logs.len(), 2);
+        assert_eq!(state.logs_by_request_id.values().map(|g| g.entries.len()).sum::<usize>(), 2);
         assert_eq!(state.selected_index, 0);
 
         // Add entry with different request ID
@@ -266,12 +266,12 @@ mod tests {
             message: "Started GET /another".to_string(),
         };
 
-        let is_new3 = state.add_log_entry(log_entry3);
+        let (is_new3, _) = state.add_log_entry(log_entry3);
         assert!(is_new3);
         assert_eq!(state.request_ids.len(), 2);
         assert_eq!(state.request_ids[0], "req-2");
         assert_eq!(state.request_ids[1], "req-1");
-        assert_eq!(state.all_logs.len(), 3);
+        assert_eq!(state.logs_by_request_id.values().map(|g| g.entries.len()).sum::<usize>(), 3);
         assert_eq!(state.selected_index, 1);
     }
 
@@ -280,7 +280,7 @@ mod tests {
         let mut state = AppState::new();
         assert_eq!(state.selected_index, 0);
 
-        // 最初のリクエストを追加
+        // Add the first request
         let log_entry1 = LogEntry {
             timestamp: Local::now(),
             request_id: "req-1".to_string(),
@@ -289,7 +289,7 @@ mod tests {
         state.add_log_entry(log_entry1);
         assert_eq!(state.selected_index, 0);
 
-        // 2つ目のリクエストを追加（インデックスは1に調整される）
+        // Add second request (index adjusts to 1)
         let log_entry2 = LogEntry {
             timestamp: Local::now(),
             request_id: "req-2".to_string(),
@@ -298,11 +298,11 @@ mod tests {
         state.add_log_entry(log_entry2);
         assert_eq!(state.selected_index, 1);
 
-        // 手動で最新（インデックス0）を選択
+        // Manually select the latest (index 0)
         state.select_request(0);
         assert_eq!(state.selected_index, 0);
 
-        // 3つ目のリクエストを追加（最新を選択していたのでインデックスは1に調整される）
+        // Add third request (was viewing latest, so index adjusts to 1)
         let log_entry3 = LogEntry {
             timestamp: Local::now(),
             request_id: "req-3".to_string(),

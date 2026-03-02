@@ -6,6 +6,10 @@ use std::sync::LazyLock;
 static ANSI_ESCAPE_PATTERN: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"\x1b\[[0-9;]*[mK]").expect("Invalid ANSI escape sequence regex"));
 
+pub static RE_COMPLETED: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"Completed (?P<status>\d+) .+ in (?P<duration>\d+)ms").unwrap()
+});
+
 pub fn parse(line: &str) -> Option<LogEntry> {
     let trimmed = line.trim_start();
     if trimmed.is_empty() {
