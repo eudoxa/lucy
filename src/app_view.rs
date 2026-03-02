@@ -8,7 +8,7 @@ pub enum ScrollDirection {
 
 pub struct AppView {
     pub focused_panel: Panel,
-    pub scroll_offsets: std::collections::HashMap<Panel, usize>,
+    pub scroll_offsets: [usize; 3],
     pub layout_info: LayoutInfo,
     pub panel_ratios: [f64; 3],
     pub dragging_border: Option<usize>,
@@ -18,14 +18,9 @@ impl AppView {
     const VIEW_PADDING: u16 = 4;
 
     pub fn new() -> Self {
-        let mut scroll_offsets = std::collections::HashMap::new();
-        scroll_offsets.insert(Panel::RequestList, 0);
-        scroll_offsets.insert(Panel::RequestDetail, 0);
-        scroll_offsets.insert(Panel::SqlInfo, 0);
-
         Self {
             focused_panel: Panel::RequestList,
-            scroll_offsets,
+            scroll_offsets: [0; 3],
             layout_info: LayoutInfo::new(),
             panel_ratios: [0.20, 0.60, 0.20],
             dragging_border: None,
@@ -33,13 +28,11 @@ impl AppView {
     }
 
     pub fn get_scroll_offset(&self, panel: Panel) -> usize {
-        *self.scroll_offsets.get(&panel).unwrap_or(&0)
+        self.scroll_offsets[panel.index()]
     }
 
     pub fn set_scroll_offset(&mut self, panel: Panel, offset: usize) {
-        if let Some(current) = self.scroll_offsets.get_mut(&panel) {
-            *current = offset;
-        }
+        self.scroll_offsets[panel.index()] = offset;
     }
 
     pub fn apply_scroll(&mut self, panel: Panel, direction: ScrollDirection, max_scroll: usize) {
@@ -63,6 +56,9 @@ impl AppView {
 
     pub fn adjust_scroll_for_index(&mut self, panel: Panel, index: usize) {
         let viewport_height = self.viewport_height(panel);
+        if viewport_height == 0 {
+            return;
+        }
         let current_offset = self.get_scroll_offset(panel);
 
         if index < current_offset {

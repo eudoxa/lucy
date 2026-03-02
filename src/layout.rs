@@ -1,5 +1,4 @@
 use ratatui::layout::Rect;
-use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Panel {
@@ -12,26 +11,41 @@ impl Panel {
     pub(crate) fn all() -> [Panel; 3] {
         [Panel::RequestList, Panel::RequestDetail, Panel::SqlInfo]
     }
+
+    pub fn index(self) -> usize {
+        match self {
+            Panel::RequestList => 0,
+            Panel::RequestDetail => 1,
+            Panel::SqlInfo => 2,
+        }
+    }
 }
 
-#[derive(Default, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct LayoutInfo {
-    regions: HashMap<Panel, Rect>,
+    regions: [Rect; 3],
+}
+
+impl Default for LayoutInfo {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl LayoutInfo {
     pub fn new() -> Self {
         Self {
-            regions: HashMap::new(),
+            regions: [Rect::default(); 3],
         }
     }
 
     pub fn with_region(mut self, panel: Panel, rect: Rect) -> Self {
-        self.regions.insert(panel, rect);
+        self.regions[panel.index()] = rect;
         self
     }
+
     pub fn region(&self, panel: Panel) -> Rect {
-        self.regions.get(&panel).cloned().unwrap_or_default()
+        self.regions[panel.index()]
     }
 }
 
@@ -67,7 +81,6 @@ mod tests {
         let rect = Rect::new(0, 0, 10, 10);
         let layout = LayoutInfo::new().with_region(Panel::RequestList, rect);
 
-        assert_eq!(layout.regions.len(), 1);
         assert_eq!(layout.region(Panel::RequestList), rect);
     }
 
