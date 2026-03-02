@@ -23,6 +23,9 @@ where
     terminal.show_cursor()?;
     // Send SIGPIPE to the process group to signal the upstream pipe source
     // (e.g., `tail -f | lucy`) that we're done reading.
+    // NOTE: kill(0, ...) sends to the entire process group, which will also
+    // terminate any other processes in the same group. This is acceptable
+    // because lucy is typically the last command in a pipe chain.
     unsafe {
         libc::kill(0, libc::SIGPIPE);
     }
@@ -32,29 +35,35 @@ where
 fn setup_tracing_subscriber() -> Result<()> {
     use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt};
 
-    let file = std::fs::File::create("tracing.log")?;
-    let file_layer = fmt::layer().with_writer(file);
+    let is_dev = std::env::var("LUCY_DEV").is_ok();
 
-    let default = if std::env::var("LUCY_DEV").is_ok() {
-        "debug"
+    if is_dev {
+        let file = std::fs::File::create("tracing.log")?;
+        let file_layer = fmt::layer().with_writer(file);
+
+        tracing_subscriber::registry()
+            .with(
+                tracing_subscriber::EnvFilter::try_from_default_env()
+                    .unwrap_or_else(|_| "debug".into()),
+            )
+            .with(file_layer)
+            .init();
     } else {
-        "info"
-    };
-
-    tracing_subscriber::registry()
-        .with(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| default.into()),
-        )
-        .with(file_layer)
-        .init();
+        tracing_subscriber::registry()
+            .with(
+                tracing_subscriber::EnvFilter::try_from_default_env()
+                    .unwrap_or_else(|_| "warn".into()),
+            )
+            .with(fmt::layer().with_writer(std::io::sink))
+            .init();
+    }
 
     Ok(())
 }
 
 fn setup_panic_handler() {
     panic::set_hook(Box::new(|panic_info| {
-        let backtrace = backtrace::Backtrace::new();
+        let backtrace = std::backtrace::Backtrace::force_capture();
         let location = panic_info
             .location()
             .map(|location| {

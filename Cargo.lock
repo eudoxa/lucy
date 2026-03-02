@@ -525,7 +525,6 @@ name = "lucy"
 version = "0.1.0"
 dependencies = [
  "ansi-to-tui",
- "backtrace",
  "chrono",
  "color-eyre",
  "crossterm 0.29.0",
