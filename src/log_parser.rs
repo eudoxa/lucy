@@ -1,10 +1,10 @@
 use crate::app_state::LogEntry;
 use chrono::Local;
-use once_cell::sync::Lazy;
 use regex::Regex;
+use std::sync::LazyLock;
 
-static ANSI_ESCAPE_PATTERN: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"\x1b\[[0-9;]*[mK]").expect("Invalid ANSI escape sequence regex"));
+static ANSI_ESCAPE_PATTERN: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\x1b\[[0-9;]*[mK]").expect("Invalid ANSI escape sequence regex"));
 
 pub fn parse(line: &str) -> Option<LogEntry> {
     let trimmed = line.trim_start();
@@ -42,9 +42,8 @@ fn extract_request_id(line: &str) -> Option<String> {
         return None;
     }
 
-    let start = 0;
-    let end = line[start..].find(']')?;
-    let request_id = line[start + 1..end].trim();
+    let end = line.find(']')?;
+    let request_id = line[1..end].trim();
 
     if !request_id.is_empty() {
         Some(request_id.to_string())

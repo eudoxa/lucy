@@ -1,6 +1,6 @@
 use crate::app_state::{AppState, LogEntry};
 use crate::app_view::{AppView, ScrollDirection};
-use crate::layout::{LayoutInfo, Panel};
+use crate::layout::Panel;
 use crate::panel_components;
 use crossterm::event::{self, Event, KeyCode};
 
@@ -103,154 +103,33 @@ impl App {
 
             match crossterm::event::poll(std::time::Duration::from_millis(16)) {
                 Ok(true) => {
-                    let event_result = event::read();
-                    if let Err(e) = &event_result {
-                        tracing::debug!("Event read error: {:?}", e);
-                        continue;
-                    }
+                    let event = match event::read() {
+                        Ok(event) => event,
+                        Err(e) => {
+                            tracing::debug!("Event read error: {:?}", e);
+                            continue;
+                        }
+                    };
 
-                    match event_result.unwrap() {
-                        Event::Key(key) if self.search_mode.is_some() => match key.code {
-                            KeyCode::Esc => {
-                                match &self.search_mode {
-                                    Some(SearchTarget::RequestList) => {
-                                        self.search_query.clear();
-                                        self.filtered_indices = None;
-                                    }
-                                    Some(SearchTarget::DetailLog) => {
-                                        self.detail_search_query.clear();
-                                    }
-                                    None => {}
-                                }
-                                self.search_mode = None;
-                            }
-                            KeyCode::Enter => {
-                                self.search_mode = None;
-                                // Keep filter/highlight active
-                            }
-                            KeyCode::Backspace => match &self.search_mode {
-                                Some(SearchTarget::RequestList) => {
-                                    self.search_query.pop();
-                                    self.update_filter();
-                                }
-                                Some(SearchTarget::DetailLog) => {
-                                    self.detail_search_query.pop();
-                                }
-                                None => {}
-                            },
-                            KeyCode::Char('c')
-                                if key.modifiers.contains(event::KeyModifiers::CONTROL) =>
+                    match event {
+                        Event::Key(key) if self.search_mode.is_some() => {
+                            if key.code == KeyCode::Char('c')
+                                && key.modifiers.contains(event::KeyModifiers::CONTROL)
                             {
                                 return Ok(());
                             }
-                            KeyCode::Char(c) => match &self.search_mode {
-                                Some(SearchTarget::RequestList) => {
-                                    self.search_query.push(c);
-                                    self.update_filter();
-                                }
-                                Some(SearchTarget::DetailLog) => {
-                                    self.detail_search_query.push(c);
-                                }
-                                None => {}
-                            },
-                            _ => {}
-                        },
-                        Event::Key(key) => match key.code {
-                            KeyCode::Char('c')
-                                if key.modifiers.contains(event::KeyModifiers::CONTROL) =>
+                            self.handle_search_key(key);
+                        }
+                        Event::Key(key) => {
+                            if key.code == KeyCode::Char('c')
+                                && key.modifiers.contains(event::KeyModifiers::CONTROL)
                             {
                                 return Ok(());
                             }
-                            KeyCode::Char('/') => match self.app_view.focused_panel {
-                                Panel::RequestList => {
-                                    self.search_mode = Some(SearchTarget::RequestList);
-                                    self.search_query.clear();
-                                    self.filtered_indices = None;
-                                }
-                                Panel::RequestDetail => {
-                                    self.search_mode = Some(SearchTarget::DetailLog);
-                                    self.detail_search_query.clear();
-                                }
-                                _ => {}
-                            },
-                            KeyCode::Esc
-                                if self.filtered_indices.is_some()
-                                    || !self.detail_search_query.is_empty() =>
-                            {
-                                self.search_query.clear();
-                                self.filtered_indices = None;
-                                self.detail_search_query.clear();
-                            }
-                            KeyCode::BackTab => self.toggle_focus_reverse(),
-                            KeyCode::Tab => self.toggle_focus(),
-                            KeyCode::Char(' ') => self.jump_to_latest(),
-                            KeyCode::Char('m') | KeyCode::Char('M') => self.toggle_copy_mode()?,
-                            KeyCode::Char('s') | KeyCode::Char('S') => self.toggle_simple_mode()?,
-                            KeyCode::Char('d')
-                                if key.modifiers.contains(event::KeyModifiers::CONTROL) =>
-                            {
-                                match self.app_view.focused_panel {
-                                    Panel::RequestList => {
-                                        self.next_request(REQUEST_SKIP_COUNT);
-                                    }
-                                    Panel::RequestDetail => self.apply_scroll_to(
-                                        Panel::RequestDetail,
-                                        SCROLL_PAGE_SIZE as i8,
-                                    ),
-                                    Panel::SqlInfo => {
-                                        self.apply_scroll_to(Panel::SqlInfo, SCROLL_PAGE_SIZE as i8)
-                                    }
-                                }
-                            }
-                            KeyCode::Char('u')
-                                if key.modifiers.contains(event::KeyModifiers::CONTROL) =>
-                            {
-                                match self.app_view.focused_panel {
-                                    Panel::RequestList => {
-                                        self.previous_request(REQUEST_SKIP_COUNT);
-                                    }
-                                    Panel::RequestDetail => self.apply_scroll_to(
-                                        Panel::RequestDetail,
-                                        -(SCROLL_PAGE_SIZE as i8),
-                                    ),
-                                    Panel::SqlInfo => self
-                                        .apply_scroll_to(Panel::SqlInfo, -(SCROLL_PAGE_SIZE as i8)),
-                                }
-                            }
-                            _ => match self.app_view.focused_panel {
-                                Panel::RequestList => match key.code {
-                                    KeyCode::Char('j') | KeyCode::Down => {
-                                        self.next_request(SCROLL_UNIT)
-                                    }
-                                    KeyCode::Char('k') | KeyCode::Up => {
-                                        self.previous_request(SCROLL_UNIT)
-                                    }
-                                    _ => {}
-                                },
-                                _ => match key.code {
-                                    KeyCode::Char('j') | KeyCode::Down => self.apply_scroll_to(
-                                        self.app_view.focused_panel,
-                                        SCROLL_UNIT as i8,
-                                    ),
-                                    KeyCode::Char('k') | KeyCode::Up => self.apply_scroll_to(
-                                        self.app_view.focused_panel,
-                                        -(SCROLL_UNIT as i8),
-                                    ),
-                                    KeyCode::PageDown => self.apply_scroll_to(
-                                        self.app_view.focused_panel,
-                                        SCROLL_PAGE_SIZE as i8,
-                                    ),
-                                    KeyCode::PageUp => self.apply_scroll_to(
-                                        self.app_view.focused_panel,
-                                        -(SCROLL_PAGE_SIZE as i8),
-                                    ),
-                                    _ => {}
-                                },
-                            },
-                        },
+                            self.handle_normal_key(key)?;
+                        }
                         Event::Mouse(mouse_event) if !self.copy_mode_enabled => {
-                            let layout_info = self.app_view.layout_info.clone();
-                            self.handle_mouse_event(mouse_event, &layout_info);
+                            self.handle_mouse_event(mouse_event);
                         }
                         _ => {}
                     }
@@ -288,7 +167,7 @@ impl App {
         }
     }
 
-    fn apply_scroll_to(&mut self, panel: Panel, amount: i8) {
+    fn apply_scroll_to(&mut self, panel: Panel, amount: isize) {
         let max_scroll = match panel {
             Panel::RequestDetail => self.get_max_detail_scroll(),
             Panel::SqlInfo => self.get_max_sql_scroll(),
@@ -296,7 +175,7 @@ impl App {
         };
 
         let direction = if amount < 0 {
-            ScrollDirection::Up(amount.unsigned_abs() as usize)
+            ScrollDirection::Up(amount.unsigned_abs())
         } else {
             ScrollDirection::Down(amount as usize)
         };
@@ -350,9 +229,8 @@ impl App {
         self.select_request(0);
     }
 
-    fn toggle_simple_mode(&mut self) -> color_eyre::Result<()> {
+    fn toggle_simple_mode(&mut self) {
         self.simple_mode_enabled = !self.simple_mode_enabled;
-        Ok(())
     }
 
     fn update_filter(&mut self) {
@@ -398,7 +276,118 @@ impl App {
         }
     }
 
-    fn handle_mouse_event(&mut self, mouse_event: event::MouseEvent, layout_info: &LayoutInfo) {
+    fn handle_search_key(&mut self, key: event::KeyEvent) {
+        let Some(target) = &self.search_mode else {
+            return;
+        };
+        match key.code {
+            KeyCode::Esc => {
+                match target {
+                    SearchTarget::RequestList => {
+                        self.search_query.clear();
+                        self.filtered_indices = None;
+                    }
+                    SearchTarget::DetailLog => {
+                        self.detail_search_query.clear();
+                    }
+                }
+                self.search_mode = None;
+            }
+            KeyCode::Enter => {
+                self.search_mode = None;
+            }
+            KeyCode::Backspace => match target {
+                SearchTarget::RequestList => {
+                    self.search_query.pop();
+                    self.update_filter();
+                }
+                SearchTarget::DetailLog => {
+                    self.detail_search_query.pop();
+                }
+            },
+            KeyCode::Char(c) => match target {
+                SearchTarget::RequestList => {
+                    self.search_query.push(c);
+                    self.update_filter();
+                }
+                SearchTarget::DetailLog => {
+                    self.detail_search_query.push(c);
+                }
+            },
+            _ => {}
+        }
+    }
+
+    fn handle_normal_key(&mut self, key: event::KeyEvent) -> color_eyre::Result<()> {
+        match key.code {
+            KeyCode::Char('/') => match self.app_view.focused_panel {
+                Panel::RequestList => {
+                    self.search_mode = Some(SearchTarget::RequestList);
+                    self.search_query.clear();
+                    self.filtered_indices = None;
+                }
+                Panel::RequestDetail => {
+                    self.search_mode = Some(SearchTarget::DetailLog);
+                    self.detail_search_query.clear();
+                }
+                _ => {}
+            },
+            KeyCode::Esc
+                if self.filtered_indices.is_some()
+                    || !self.detail_search_query.is_empty() =>
+            {
+                self.search_query.clear();
+                self.filtered_indices = None;
+                self.detail_search_query.clear();
+            }
+            KeyCode::BackTab => self.toggle_focus_reverse(),
+            KeyCode::Tab => self.toggle_focus(),
+            KeyCode::Char(' ') => self.jump_to_latest(),
+            KeyCode::Char('m') | KeyCode::Char('M') => self.toggle_copy_mode()?,
+            KeyCode::Char('s') | KeyCode::Char('S') => self.toggle_simple_mode(),
+            KeyCode::Char('d')
+                if key.modifiers.contains(event::KeyModifiers::CONTROL) =>
+            {
+                match self.app_view.focused_panel {
+                    Panel::RequestList => self.next_request(REQUEST_SKIP_COUNT),
+                    _ => self.apply_scroll_to(
+                        self.app_view.focused_panel,
+                        SCROLL_PAGE_SIZE as isize,
+                    ),
+                }
+            }
+            KeyCode::Char('u')
+                if key.modifiers.contains(event::KeyModifiers::CONTROL) =>
+            {
+                match self.app_view.focused_panel {
+                    Panel::RequestList => self.previous_request(REQUEST_SKIP_COUNT),
+                    _ => self.apply_scroll_to(
+                        self.app_view.focused_panel,
+                        -(SCROLL_PAGE_SIZE as isize),
+                    ),
+                }
+            }
+            KeyCode::Char('j') | KeyCode::Down => match self.app_view.focused_panel {
+                Panel::RequestList => self.next_request(SCROLL_UNIT),
+                _ => self.apply_scroll_to(self.app_view.focused_panel, SCROLL_UNIT as isize),
+            },
+            KeyCode::Char('k') | KeyCode::Up => match self.app_view.focused_panel {
+                Panel::RequestList => self.previous_request(SCROLL_UNIT),
+                _ => self.apply_scroll_to(self.app_view.focused_panel, -(SCROLL_UNIT as isize)),
+            },
+            KeyCode::PageDown => {
+                self.apply_scroll_to(self.app_view.focused_panel, SCROLL_PAGE_SIZE as isize)
+            }
+            KeyCode::PageUp => self.apply_scroll_to(
+                self.app_view.focused_panel,
+                -(SCROLL_PAGE_SIZE as isize),
+            ),
+            _ => {}
+        }
+        Ok(())
+    }
+
+    fn handle_mouse_event(&mut self, mouse_event: event::MouseEvent) {
         let (x, y) = (mouse_event.column, mouse_event.row);
 
         match mouse_event.kind {
@@ -415,15 +404,14 @@ impl App {
                             ScrollDirection::Up(SCROLL_UNIT),
                             self.get_max_request_list_scroll(),
                         ),
-
                         _ => {}
                     },
                     Some(panel) => match mouse_event.kind {
                         event::MouseEventKind::ScrollDown => {
-                            self.apply_scroll_to(panel, SCROLL_UNIT as i8)
+                            self.apply_scroll_to(panel, SCROLL_UNIT as isize)
                         }
                         event::MouseEventKind::ScrollUp => {
-                            self.apply_scroll_to(panel, -(SCROLL_UNIT as i8))
+                            self.apply_scroll_to(panel, -(SCROLL_UNIT as isize))
                         }
                         _ => {}
                     },
@@ -436,10 +424,11 @@ impl App {
                     self.app_view.dragging_border = Some(border_idx);
                 } else {
                     match self.app_view.panel_at_point(x, y) {
-                        Some(panel) if matches!(panel, Panel::RequestList) => {
-                            self.app_view.focused_panel = panel;
-                            let row_in_list =
-                                y.saturating_sub(layout_info.region(Panel::RequestList).y + 2);
+                        Some(Panel::RequestList) => {
+                            self.app_view.focused_panel = Panel::RequestList;
+                            let list_y =
+                                self.app_view.layout_info.region(Panel::RequestList).y;
+                            let row_in_list = y.saturating_sub(list_y + 2);
                             let current_offset =
                                 self.app_view.get_scroll_offset(Panel::RequestList);
                             let clicked_index = current_offset + row_in_list as usize;
@@ -458,9 +447,9 @@ impl App {
 
             event::MouseEventKind::Drag(event::MouseButton::Left) => {
                 if self.app_view.dragging_border.is_some() {
-                    let total_width = layout_info.region(Panel::RequestList).width
-                        + layout_info.region(Panel::RequestDetail).width
-                        + layout_info.region(Panel::SqlInfo).width;
+                    let total_width = self.app_view.layout_info.region(Panel::RequestList).width
+                        + self.app_view.layout_info.region(Panel::RequestDetail).width
+                        + self.app_view.layout_info.region(Panel::SqlInfo).width;
                     self.app_view.apply_drag(x, total_width);
                 }
             }

@@ -1,7 +1,6 @@
 use std::io::{self, BufRead, BufReader, Stdin};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread::{self, JoinHandle};
-use std::time::Duration;
 
 pub struct Reader {
     #[allow(dead_code)]
@@ -24,14 +23,11 @@ impl Reader {
 fn process_input(input: Stdin, tx: Sender<String>) {
     let mut reader = BufReader::with_capacity(32 * 1024, input);
     let mut buffer = String::with_capacity(1024);
-    let wait_time = Duration::from_millis(1);
 
     loop {
         buffer.clear();
         match reader.read_line(&mut buffer) {
-            Ok(0) => {
-                break;
-            }
+            Ok(0) => break,
             Ok(_) => {
                 if let Err(e) = tx.send(buffer.clone()) {
                     tracing::debug!("Failed to send message to channel: {}", e);
@@ -39,15 +35,10 @@ fn process_input(input: Stdin, tx: Sender<String>) {
                 }
             }
             Err(e) => {
-                if e.kind() == io::ErrorKind::WouldBlock {
-                    thread::sleep(wait_time);
-                    continue;
-                }
                 tracing::debug!("Input reader error: {}", e);
                 break;
             }
         }
-        thread::sleep(wait_time);
     }
 
     tracing::debug!("Input reader thread terminated");

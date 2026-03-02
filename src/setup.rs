@@ -4,7 +4,7 @@ use std::panic;
 
 pub fn initialize() -> Result<()> {
     color_eyre::install()?;
-    setup_tracing_subscriber();
+    setup_tracing_subscriber()?;
     setup_panic_handler();
     Ok(())
 }
@@ -21,21 +21,19 @@ where
         crossterm::event::DisableMouseCapture
     )?;
     terminal.show_cursor()?;
+    // Send SIGPIPE to the process group to signal the upstream pipe source
+    // (e.g., `tail -f | lucy`) that we're done reading.
     unsafe {
         libc::kill(0, libc::SIGPIPE);
     }
     Ok(())
 }
 
-fn setup_tracing_subscriber() {
+fn setup_tracing_subscriber() -> Result<()> {
     use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt};
 
-    let file_layer = match std::fs::File::create("tracing.log") {
-        Ok(file) => fmt::layer().with_writer(file),
-        Err(err) => {
-            panic!("Failed to create tracing log file: {}", err);
-        }
-    };
+    let file = std::fs::File::create("tracing.log")?;
+    let file_layer = fmt::layer().with_writer(file);
 
     let default = if std::env::var("LUCY_DEV").is_ok() {
         "debug"
@@ -50,6 +48,8 @@ fn setup_tracing_subscriber() {
         )
         .with(file_layer)
         .init();
+
+    Ok(())
 }
 
 fn setup_panic_handler() {

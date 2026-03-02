@@ -1,11 +1,11 @@
 use crate::{sql_info::SqlQueryInfo, theme::THEME};
-use once_cell::sync::Lazy;
 use ratatui::style::Color;
 use regex::Regex;
+use std::sync::LazyLock;
 use std::collections::{HashMap, VecDeque};
 
-static RE_COMPLETED_DURATION: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"Completed \d+ .+ in (\d+)ms").unwrap());
+static RE_COMPLETED_DURATION: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"Completed \d+ .+ in (\d+)ms").unwrap());
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum StatusType {
@@ -16,7 +16,7 @@ pub enum StatusType {
 }
 
 impl StatusType {
-    pub fn to_color(&self) -> Color {
+    pub fn to_color(self) -> Color {
         match self {
             StatusType::Success => THEME.success,
             StatusType::Warning => THEME.warning,
@@ -62,12 +62,8 @@ impl LogGroup {
     pub fn add_entry(&mut self, log_entry: LogEntry) {
         let message = &log_entry.message;
 
-        if message.contains("Started ") {
-            if let Some(start_pos) = message.find("Started ") {
-                self.title = message[(start_pos + 8)..].to_string();
-            } else {
-                self.title = message.to_string();
-            }
+        if let Some(start_pos) = message.find("Started ") {
+            self.title = message[(start_pos + 8)..].to_string();
         }
 
         if message.contains("Completed ") {
@@ -76,15 +72,14 @@ impl LogGroup {
                 .split_whitespace()
                 .skip_while(|&s| s != "Completed")
                 .nth(1)
+                && let Ok(status_code) = status_str.parse::<u16>()
             {
-                if let Ok(status_code) = status_str.parse::<u16>() {
-                    self.status_type = match status_code {
-                        200..=299 => StatusType::Success,
-                        400..=499 => StatusType::Warning,
-                        500..=599 => StatusType::Error,
-                        _ => StatusType::Unknown,
-                    };
-                }
+                self.status_type = match status_code {
+                    200..=299 => StatusType::Success,
+                    400..=499 => StatusType::Warning,
+                    500..=599 => StatusType::Error,
+                    _ => StatusType::Unknown,
+                };
             }
             if let Some(caps) = RE_COMPLETED_DURATION.captures(message)
                 && let Some(ms_str) = caps.get(1)

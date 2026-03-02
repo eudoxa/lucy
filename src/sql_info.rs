@@ -1,8 +1,8 @@
-use once_cell::sync::Lazy;
 use regex::Regex;
+use std::sync::LazyLock;
 use std::collections::HashMap;
 
-static TABLE_PATTERN: Lazy<Regex> = Lazy::new(|| {
+static TABLE_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
         r#"(?:FROM|JOIN|UPDATE|INTO)\s+(?:"([a-zA-Z0-9_]+)"|([a-zA-Z0-9_]+))(?:\s|\)|$)"#,
     )

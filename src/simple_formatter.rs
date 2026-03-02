@@ -1,24 +1,24 @@
 use ansi_to_tui::IntoText;
-use once_cell::sync::Lazy;
 use ratatui::text::{Line, Span};
 use regex::Regex;
+use std::sync::LazyLock;
 
 use crate::theme::{ANSI_RESET, ColorExt, THEME};
 
-static RE_STARTED: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r#"Started (?P<method>[A-Z]+) "(?P<path>[^"]+)""#).unwrap());
-static RE_PROCESSING: Lazy<Regex> = Lazy::new(|| {
+static RE_STARTED: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"Started (?P<method>[A-Z]+) "(?P<path>[^"]+)""#).unwrap());
+static RE_PROCESSING: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r#"Processing by (?P<controller>[\w:]+)#(?P<action>\w+) as (?P<format>\w+)"#)
         .unwrap()
 });
-static RE_PARAMETERS: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r#"Parameters: \{(?P<params>.*)\}"#).unwrap());
-static RE_SQL: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r#"(SELECT|INSERT|UPDATE|DELETE).*"#).unwrap());
-static RE_COMPLETED: Lazy<Regex> = Lazy::new(|| {
+static RE_PARAMETERS: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"Parameters: \{(?P<params>.*)\}"#).unwrap());
+static RE_SQL: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"(SELECT|INSERT|UPDATE|DELETE).*"#).unwrap());
+static RE_COMPLETED: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r#"Completed (?P<status>[0-9]+) [\w\s]+ in (?P<time>[0-9]+)ms"#).unwrap()
 });
-static RE_CONTINUATION: Lazy<Regex> = Lazy::new(|| Regex::new(r#"↳"#).unwrap());
+static RE_CONTINUATION: LazyLock<Regex> = LazyLock::new(|| Regex::new(r#"↳"#).unwrap());
 
 pub fn format_simple_log_line(line: &str) -> Option<Line<'static>> {
     let core_message = if let Some(index) = line.rfind("] ") {
@@ -27,12 +27,12 @@ pub fn format_simple_log_line(line: &str) -> Option<Line<'static>> {
         line
     };
 
-    let result = if let Some(captures) = RE_COMPLETED.captures(core_message) {
+    if let Some(captures) = RE_COMPLETED.captures(core_message) {
         let status = captures.name("status").unwrap().as_str();
         let colored_message = match status.chars().next().unwrap() {
-            '2' => format!("{}{}{}", THEME.success.ansi(), core_message, ANSI_RESET), // green
-            '4' => format!("{}{}{}", THEME.warning.ansi(), core_message, ANSI_RESET), // yellow
-            '5' => format!("{}{}{}", THEME.error.ansi(), core_message, ANSI_RESET),   // red
+            '2' => format!("{}{}{}", THEME.success.ansi(), core_message, ANSI_RESET),
+            '4' => format!("{}{}{}", THEME.warning.ansi(), core_message, ANSI_RESET),
+            '5' => format!("{}{}{}", THEME.error.ansi(), core_message, ANSI_RESET),
             _ => core_message.to_string(),
         };
         Some(Line::from(parse_ansi_colors(&colored_message)))
@@ -45,9 +45,7 @@ pub fn format_simple_log_line(line: &str) -> Option<Line<'static>> {
         Some(Line::from(parse_ansi_colors(core_message)))
     } else {
         None
-    };
-
-    result
+    }
 }
 
 pub fn parse_ansi_colors(text: &str) -> Vec<Span<'static>> {
