@@ -87,7 +87,14 @@ impl SqlQueryInfo {
     }
 
     pub fn display_line_count(&self) -> usize {
-        self.table_counts.len() + 4
+        // blank line(1) + SELECT/INSERT/UPDATE/DELETE(4) + table section
+        let base = 1 + 4;
+        if self.table_counts.is_empty() {
+            base
+        } else {
+            // blank line before table list(1) + table rows
+            base + 1 + self.table_counts.len()
+        }
     }
 
     pub fn is_n_plus_one(&self, table: &str) -> bool {
@@ -233,13 +240,13 @@ mod tests {
     #[test]
     fn test_display_line_count() {
         let mut info = SqlQueryInfo::new();
-        assert_eq!(info.display_line_count(), 4); // Base count with no tables
+        assert_eq!(info.display_line_count(), 5); // 空行(1) + 4クエリタイプ行
 
         info.table_counts.insert("users".to_string(), 1);
-        assert_eq!(info.display_line_count(), 5); // Base + 1 table
+        assert_eq!(info.display_line_count(), 7); // 5 + 空行(1) + 1テーブル
 
         info.table_counts.insert("orders".to_string(), 1);
-        assert_eq!(info.display_line_count(), 6); // Base + 2 tables
+        assert_eq!(info.display_line_count(), 8); // 5 + 空行(1) + 2テーブル
     }
 
     #[test]
