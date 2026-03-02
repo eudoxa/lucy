@@ -3,8 +3,7 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread::{self, JoinHandle};
 
 pub struct Reader {
-    #[allow(dead_code)]
-    reader_thread: JoinHandle<()>,
+    _reader_thread: JoinHandle<()>,
 }
 
 impl Reader {
@@ -16,7 +15,7 @@ impl Reader {
             process_input(stdin, tx);
         });
 
-        (Self { reader_thread }, rx)
+        (Self { _reader_thread: reader_thread }, rx)
     }
 }
 
