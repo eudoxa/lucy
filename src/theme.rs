@@ -49,7 +49,7 @@ pub struct Theme {
 
 pub const THEME: Theme = Theme {
     success: Color::Green,
-    warning: Color::Magenta,
+    warning: Color::Yellow,
     error: Color::Red,
     default: Color::White,
     border: Color::DarkGray,
