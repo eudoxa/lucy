@@ -28,18 +28,15 @@ pub fn build_list_component(app: &App) -> List<'_> {
         .skip(current_offset)
         .take(visible_count)
     {
-        let group = app.state.logs_by_request_id.get(request_id).unwrap();
+        let Some(group) = app.state.logs_by_request_id.get(request_id) else {
+            continue;
+        };
         let time_str = group.first_timestamp.format("%H:%M").to_string();
 
         let finished = group.finished;
 
         let status_color = if finished {
-            match group.status_type {
-                StatusType::Success => THEME.success,
-                StatusType::Warning => THEME.warning,
-                StatusType::Error => THEME.error,
-                StatusType::Unknown => THEME.default,
-            }
+            group.status_type.to_color()
         } else {
             THEME.default
         };
@@ -127,14 +124,14 @@ pub fn build_list_component(app: &App) -> List<'_> {
 }
 
 pub fn build_detail_component(app: &App) -> Paragraph<'_> {
-    let (title_span, log_text) = build_detail_content(app);
+    let (title_span, log_text, total_entries) = build_detail_content(app);
 
     let border_style = match app.app_view.focused_panel {
         Panel::RequestDetail => THEME.active_border,
         _ => THEME.border,
     };
 
-    let scroll_info = build_detail_scroll_info(app);
+    let scroll_info = build_detail_scroll_info(app, total_entries);
     let title_text = format!("[{}] {} ", scroll_info, title_span);
     let status = app
         .state
@@ -172,7 +169,11 @@ fn build_detail_title(app: &App, group: &crate::app_state::LogGroup) -> Span<'st
         msg.contains("Started GET")
             || msg.contains("Started POST")
             || msg.contains("Started PUT")
+            || msg.contains("Started PATCH")
             || msg.contains("Started DELETE")
+            || msg.contains("Started HEAD")
+            || msg.contains("Started OPTIONS")
+            || msg.contains("Started TRACE")
     });
 
     let Some(entry) = entry else {
@@ -203,80 +204,82 @@ fn build_detail_title(app: &App, group: &crate::app_state::LogGroup) -> Span<'st
     Span::raw(text)
 }
 
-fn build_detail_log_lines(app: &App, group: &crate::app_state::LogGroup) -> Vec<Line<'static>> {
-    let sql_info = &group.sql_query_info;
-    let detail_query = &app.detail_search_query;
-
-    if app.simple_mode_enabled {
-        group
-            .entries
-            .iter()
-            .filter_map(|log| format_simple_log_line(&log.message))
+fn build_detail_log_line(
+    log: &crate::app_state::LogEntry,
+    sql_info: &SqlQueryInfo,
+    detail_query: &str,
+    simple_mode: bool,
+) -> Option<Line<'static>> {
+    if simple_mode {
+        format_simple_log_line(&log.message)
             .map(|line| highlight_n_plus_one_tables(line, sql_info))
             .map(|line| highlight_search_matches(line, detail_query))
-            .collect()
     } else {
-        group
-            .entries
-            .iter()
-            .map(|log| {
-                let message = if let Some(after_id) =
-                    strip_ansi_for_parsing(&log.message).find(']')
-                {
-                    log.message[(after_id + 1)..].trim().to_string()
-                } else {
-                    log.message.clone()
-                };
-                let spans = parse_ansi_colors(&message);
-                let line = Line::from(spans);
-                let line = highlight_n_plus_one_tables(line, sql_info);
-                highlight_search_matches(line, detail_query)
-            })
-            .collect()
+        let message = if let Some(after_id) = log.message.find(']') {
+            log.message[(after_id + 1)..].trim().to_string()
+        } else {
+            log.message.clone()
+        };
+        let spans = parse_ansi_colors(&message);
+        let line = Line::from(spans);
+        let line = highlight_n_plus_one_tables(line, sql_info);
+        Some(highlight_search_matches(line, detail_query))
     }
 }
 
-fn build_detail_content(app: &App) -> (Span<'static>, Text<'static>) {
+fn build_detail_content(app: &App) -> (Span<'static>, Text<'static>, usize) {
     let Some(group) = app.state.selected_group() else {
-        return (Span::raw("Logs"), Text::from("Waiting for logs..."));
+        return (Span::raw("Logs"), Text::from("Waiting for logs..."), 0);
     };
 
     let title_span = build_detail_title(app, group);
-    let display_lines = build_detail_log_lines(app, group);
-    let total = display_lines.len();
+    let sql_info = &group.sql_query_info;
+    let detail_query = &app.detail_search_query;
+    let simple_mode = app.simple_mode_enabled;
 
     let viewport_height = app.app_view.viewport_height(Panel::RequestDetail);
     let scroll_offset = app.app_view.get_scroll_offset(Panel::RequestDetail);
 
-    let start_idx = scroll_offset.min(total.saturating_sub(1));
-    let visible_count = viewport_height.min(total.saturating_sub(start_idx));
-
+    // Entries are stored newest-first (push_front), so reverse for display
     let mut text = Text::default();
-    for i in 0..visible_count {
-        let idx = total.saturating_sub(1).saturating_sub(start_idx + i);
-        if idx < display_lines.len() {
-            text.extend(Text::from(display_lines[idx].clone()));
-        }
-    }
-
-    (title_span, text)
-}
-
-fn build_detail_scroll_info(app: &App) -> String {
-    let Some(group) = app.state.selected_group() else {
-        return "0/0".to_string();
-    };
-
-    let total_entries = if app.simple_mode_enabled {
-        group
+    let total = if simple_mode {
+        // Collect filtered lines once in chronological order
+        let all_lines: Vec<Line<'static>> = group
             .entries
             .iter()
-            .filter(|log| format_simple_log_line(&log.message).is_some())
-            .count()
+            .rev()
+            .filter_map(|log| format_simple_log_line(&log.message))
+            .collect();
+        let total = all_lines.len();
+        let start_idx = scroll_offset.min(total.saturating_sub(1));
+        let visible_count = viewport_height.min(total.saturating_sub(start_idx));
+
+        for line in all_lines.into_iter().skip(start_idx).take(visible_count) {
+            let line = highlight_n_plus_one_tables(line, sql_info);
+            let line = highlight_search_matches(line, detail_query);
+            text.extend(Text::from(line));
+        }
+        total
     } else {
-        group.entries.len()
+        let total = group.entries.len();
+        let start_idx = scroll_offset.min(total.saturating_sub(1));
+        let visible_count = viewport_height.min(total.saturating_sub(start_idx));
+
+        for i in 0..visible_count {
+            let idx = total.saturating_sub(1).saturating_sub(start_idx + i);
+            if let Some(log) = group.entries.get(idx)
+                && let Some(line) = build_detail_log_line(log, sql_info, detail_query, false)
+            {
+                text.extend(Text::from(line));
+            }
+        }
+        total
     };
 
+    (title_span, text, total)
+}
+
+fn build_detail_scroll_info(app: &App, total_entries: usize) -> String {
     if total_entries == 0 {
         "0/0".to_string()
     } else {
@@ -499,8 +502,15 @@ fn highlight_search_matches<'a>(line: Line<'a>, query: &str) -> Line<'a> {
         let mut last_end = 0;
         let mut parts: Vec<Span<'a>> = Vec::new();
 
-        for (start, _) in content_lower.match_indices(&query_lower) {
-            let end = start + query.len();
+        for (start, matched) in content_lower.match_indices(&query_lower) {
+            let end = start + matched.len();
+            // UTF-8境界チェック（小文字化でバイト長が変わるケースに対応）
+            if end > content.len()
+                || !content.is_char_boundary(start)
+                || !content.is_char_boundary(end)
+            {
+                continue;
+            }
             if start > last_end {
                 parts.push(Span::styled(content[last_end..start].to_string(), span.style));
             }
