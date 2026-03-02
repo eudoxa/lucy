@@ -82,23 +82,21 @@ impl App {
         terminal: &mut ratatui::Terminal<B>,
         rx: std::sync::mpsc::Receiver<String>,
     ) -> color_eyre::Result<()> {
-        let mut batch_size: u8 = 10;
-
         loop {
             terminal.draw(|f| {
                 self.render(f);
             })?;
 
+            let mut batch_remaining: u8 = 10;
             while let Ok(line) = rx.try_recv() {
                 if let Some(entry) = crate::log_parser::parse(&line) {
                     self.add_log_entry(entry);
                 }
 
-                if batch_size == 0 {
-                    batch_size = 10;
+                batch_remaining = batch_remaining.saturating_sub(1);
+                if batch_remaining == 0 {
                     break;
                 }
-                batch_size -= 1;
             }
 
             match crossterm::event::poll(std::time::Duration::from_millis(16)) {
@@ -152,7 +150,19 @@ impl App {
     }
 
     pub fn next_request(&mut self, n: usize) {
-        if self.state.next_request(n) {
+        if let Some(indices) = &self.filtered_indices {
+            // Navigate within the filtered list
+            let current_pos = indices
+                .iter()
+                .position(|&i| i == self.state.selected_index);
+            let new_pos = match current_pos {
+                Some(pos) => (pos + n).min(indices.len().saturating_sub(1)),
+                None => 0,
+            };
+            if let Some(&target_index) = indices.get(new_pos) {
+                self.select_request(target_index);
+            }
+        } else if self.state.next_request(n) {
             self.app_view.set_scroll_offset(Panel::RequestDetail, 0);
             self.app_view
                 .adjust_scroll_for_index(Panel::RequestList, self.state.selected_index);
@@ -160,7 +170,19 @@ impl App {
     }
 
     pub fn previous_request(&mut self, n: usize) {
-        if self.state.previous_request(n) {
+        if let Some(indices) = &self.filtered_indices {
+            // Navigate within the filtered list
+            let current_pos = indices
+                .iter()
+                .position(|&i| i == self.state.selected_index);
+            let new_pos = match current_pos {
+                Some(pos) => pos.saturating_sub(n),
+                None => 0,
+            };
+            if let Some(&target_index) = indices.get(new_pos) {
+                self.select_request(target_index);
+            }
+        } else if self.state.previous_request(n) {
             self.app_view.set_scroll_offset(Panel::RequestDetail, 0);
             self.app_view
                 .adjust_scroll_for_index(Panel::RequestList, self.state.selected_index);
@@ -202,10 +224,13 @@ impl App {
     }
 
     pub fn add_log_entry(&mut self, log_entry: LogEntry) {
-        let is_new_request = self.state.add_log_entry(log_entry);
+        let (is_new_request, evicted) = self.state.add_log_entry(log_entry);
         if is_new_request {
             self.app_view
                 .adjust_scroll_for_index(Panel::RequestList, self.state.selected_index);
+        }
+        if evicted && self.filtered_indices.is_some() {
+            self.update_filter();
         }
     }
 
@@ -431,10 +456,12 @@ impl App {
                             let row_in_list = y.saturating_sub(list_y + 2);
                             let current_offset =
                                 self.app_view.get_scroll_offset(Panel::RequestList);
-                            let clicked_index = current_offset + row_in_list as usize;
+                            let clicked_visual = current_offset + row_in_list as usize;
 
-                            if clicked_index < self.state.request_ids.len() {
-                                self.select_request(clicked_index);
+                            let visible = self.visible_request_ids();
+                            if let Some(&(original_index, _)) = visible.get(clicked_visual)
+                            {
+                                self.select_request(original_index);
                             }
                         }
                         Some(panel) => {
