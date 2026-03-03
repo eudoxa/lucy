@@ -143,11 +143,19 @@ impl App {
         }
     }
 
+    fn filtered_position(&self, index: usize) -> usize {
+        match &self.filtered_indices {
+            Some(indices) => indices.iter().position(|&i| i == index).unwrap_or(0),
+            None => index,
+        }
+    }
+
     fn select_request(&mut self, index: usize) {
         if self.state.select_request(index) {
             self.app_view.set_scroll_offset(Panel::RequestDetail, 0);
+            let visual_index = self.filtered_position(self.state.selected_index);
             self.app_view
-                .adjust_scroll_for_index(Panel::RequestList, self.state.selected_index);
+                .adjust_scroll_for_index(Panel::RequestList, visual_index);
         }
     }
 
@@ -208,10 +216,11 @@ impl App {
     }
 
     fn get_max_request_list_scroll(&self) -> usize {
-        self.state
-            .request_ids
-            .len()
-            .saturating_sub(self.app_view.viewport_height(Panel::RequestList))
+        let total = match &self.filtered_indices {
+            Some(indices) => indices.len(),
+            None => self.state.request_ids.len(),
+        };
+        total.saturating_sub(self.app_view.viewport_height(Panel::RequestList))
     }
 
     fn get_max_detail_scroll(&self) -> usize {
@@ -228,8 +237,9 @@ impl App {
     pub fn add_log_entry(&mut self, log_entry: LogEntry) {
         let (is_new_request, evicted) = self.state.add_log_entry(log_entry);
         if is_new_request {
+            let visual_index = self.filtered_position(self.state.selected_index);
             self.app_view
-                .adjust_scroll_for_index(Panel::RequestList, self.state.selected_index);
+                .adjust_scroll_for_index(Panel::RequestList, visual_index);
         }
         if evicted && self.filtered_indices.is_some() {
             self.update_filter();
@@ -280,6 +290,7 @@ impl App {
             .map(|(i, _)| i)
             .collect();
         self.filtered_indices = Some(indices);
+        self.app_view.set_scroll_offset(Panel::RequestList, 0);
     }
 
     pub fn visible_request_ids(&self) -> Vec<(usize, &str)> {
