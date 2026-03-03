@@ -81,7 +81,10 @@ impl App {
         &mut self,
         terminal: &mut ratatui::Terminal<B>,
         rx: std::sync::mpsc::Receiver<String>,
-    ) -> color_eyre::Result<()> {
+    ) -> color_eyre::Result<()>
+    where
+        B::Error: Send + Sync + 'static,
+    {
         loop {
             terminal.draw(|f| {
                 self.render(f);

@@ -12,6 +12,7 @@ pub fn initialize() -> Result<()> {
 pub fn cleanup<B>(terminal: &mut ratatui::Terminal<B>) -> Result<()>
 where
     B: ratatui::backend::Backend,
+    B::Error: Send + Sync + 'static,
 {
     crossterm::terminal::disable_raw_mode()?;
     crossterm::execute!(
