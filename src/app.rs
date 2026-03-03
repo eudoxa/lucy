@@ -90,14 +90,13 @@ impl App {
                 self.render(f);
             })?;
 
-            let mut batch_remaining: u8 = 10;
+            let drain_deadline =
+                std::time::Instant::now() + std::time::Duration::from_millis(100);
             while let Ok(line) = rx.try_recv() {
                 if let Some(entry) = crate::log_parser::parse(&line) {
                     self.add_log_entry(entry);
                 }
-
-                batch_remaining = batch_remaining.saturating_sub(1);
-                if batch_remaining == 0 {
+                if std::time::Instant::now() >= drain_deadline {
                     break;
                 }
             }
